@@ -100,8 +100,6 @@ def rookley(df, h_m, h_t=0.1, gridsize=50, kernel='epak'):
 
     x = M_std
     sig = np.zeros((num, 3))
-
-    # TODO: speed up with tensor instead of loop
     for i, m in enumerate(x):
         sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
 
@@ -115,3 +113,57 @@ def rookley(df, h_m, h_t=0.1, gridsize=50, kernel='epak'):
     K = np.linspace(K_min, K_max, gridsize)
 
     return smile, first, second, M, S, K, M_std
+
+# ---------------- TRY MATMUL ------ Rookley + Haerdle (Applied Quant. Finance)
+def epanechnikov(M, m, h_m, T, t, h_t):
+    u_m = (M-m)/h_m
+    u_t = (T-t)/h_t
+    return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
+
+
+def smoothing_matmul(df, t, h_m, h_t, gridsize=50, kernel=gaussian_kernel):
+    """ works, but surprisingly slow. Slower than for-loop """
+    # M = np.array(df.M)
+    M = list(df.M_std)
+    m = list(np.linspace(min(M), max(M), 5))
+    # m = [m[0]]
+    T = list(df.T)
+    y = list(df.iv)
+
+    # M = [1, 2, -2, 0]
+    # m = [-2]  # [-2, 0, 2]
+    # T = [tau, tau, tau, tau]
+    # t = tau
+    # y = [0.1, 0.2, 0.5, 0.2]
+
+    t_mat = (np.ones((len(M), len(m)))*tau)
+    T_mat = np. array(T*len(m)).reshape((len(m), len(M))).T
+
+    m_mat = np.array(m*len(M)).reshape((len(M), len(m)))
+    M_mat = np.array(M*len(m)).reshape((len(m), len(M))).T
+
+    y_mat = np.array(y*len(m)).reshape((len(M), 1, len(m)))
+
+    X1 = np.ones((len(M), len(m)))
+    X2 = M_mat - m_mat
+    X3 = X2**2  # element wise square
+    X4 = T_mat-t_mat
+    X5 = X4**2
+    X6 = X2*X4  # element wise product
+    X = np.stack([X1, X2, X3, X4, X5, X6], axis=1)
+    XT = np.transpose(X, (1,0,2))
+
+
+    # ker = kernel(M, m, h_m, T, t, h_t) # TODO: implementation of kernel missing
+    # W = np.diag(ker)
+    W = np.diag(np.ones(len(M)))
+    W_tens = np.array([W]*len(m)).reshape((len(M), len(M), len(m))) # TODO: each layer is different
+
+    XTW = np.matmul(XT, W_tens, axes=[(0,1), (0,1), (0,1)])
+    XTWX = np.matmul(XTW, X, axes=[(0,1), (0,1), (0,1)])
+
+    inv = np.linalg.pinv(XTWX).transpose((0,2,1))
+    inv_XTW = np.matmul(inv, XTW, axes=[(0,1), (0,1), (0,1)])
+    beta = np.matmul(inv_XTW, y_mat, axes=[(0,1), (0,1), (0,1)])
+
+    return beta[0,0,:], beta[1,0,:], 2*beta[2,0,:]

@@ -12,12 +12,12 @@ data_path = cwd + 'data' + os.sep
 # ------------------------------------------------------------------------ MAIN
 
 # ------------------------------------------------------------------- LOAD DATA
-d = pd.read_csv(data_path + 'calls_1.csv')
+d = pd.read_csv(data_path + 'calls_3.csv')
 
-day = '2020-03-09'
+day = '2020-03-23'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
-tau_day = 18 # 18
+tau_day = 4 # 18
 df = d[(d.tau_day == tau_day) & (d.date == day)]
 h = df.shape[0] ** (-1 / 9)
 print(h)
@@ -45,4 +45,4 @@ M = np.linspace(min(df.M), max(df.M), num=50)
 
 for spd in [spd_rookley, spd_appfinance, spd_sfe]:
     result = spd(M, S, K, smile, first, second, r, tau)
-    plt.plot(result)
+    plt.plot(K, result)
