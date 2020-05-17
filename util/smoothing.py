@@ -4,6 +4,7 @@ from scipy.stats import norm
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
+from util.plotting import surface_plot
 
 # --------------------------------------------------------- Quantlet SFE_RND_HD
 def locpoly_r(df, h, h_t=0.1, gridsize=400, kernel=None):
@@ -114,27 +115,16 @@ def rookley(df, h_m, h_t=0.1, gridsize=50, kernel='epak'):
 
     return smile, first, second, M, S, K, M_std
 
+
 # ---------------- TRY MATMUL ------ Rookley + Haerdle (Applied Quant. Finance)
-def epanechnikov(M, m, h_m, T, t, h_t):
-    u_m = (M-m)/h_m
-    u_t = (T-t)/h_t
-    return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
-
-
 def smoothing_matmul(df, t, h_m, h_t, gridsize=50, kernel=gaussian_kernel):
     """ works, but surprisingly slow. Slower than for-loop """
     # M = np.array(df.M)
     M = list(df.M_std)
     m = list(np.linspace(min(M), max(M), 5))
-    # m = [m[0]]
     T = list(df.T)
     y = list(df.iv)
-
-    # M = [1, 2, -2, 0]
-    # m = [-2]  # [-2, 0, 2]
-    # T = [tau, tau, tau, tau]
-    # t = tau
-    # y = [0.1, 0.2, 0.5, 0.2]
+    tau = df.tau.iloc[0]
 
     t_mat = (np.ones((len(M), len(m)))*tau)
     T_mat = np. array(T*len(m)).reshape((len(m), len(M))).T
@@ -167,3 +157,91 @@ def smoothing_matmul(df, t, h_m, h_t, gridsize=50, kernel=gaussian_kernel):
     beta = np.matmul(inv_XTW, y_mat, axes=[(0,1), (0,1), (0,1)])
 
     return beta[0,0,:], beta[1,0,:], 2*beta[2,0,:]
+
+
+# ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
+def gaussian_kernel(M, m, h_m, T, t, h_t):
+    u_m = (M-m)/h_m
+    u_t = (T-t)/h_t
+    return norm.cdf(u_m) * norm.cdf(u_t)
+
+
+def epanechnikov(M, m, h_m, T, t, h_t):
+    u_m = (M-m)/h_m
+    u_t = (T-t)/h_t
+    print(sum(u_t))
+    return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
+
+
+def iv_smoothing(df, h, gridsize=50, kernel='epak'):
+
+    if kernel=='epak':
+        kernel = epanechnikov
+    elif kernel=='gauss':
+        kernel = gaussian_kernel
+    else:
+        print('kernel not know, use epanechnikov')
+        kernel = epanechnikov
+
+    num = gridsize
+
+
+    T_min, T_max = min(df.tau), max(df.tau)
+
+    taus = df.tau.value_counts()
+
+    sig = np.zeros((len(taus), gridsize, 3))
+
+    x_grid = np.zeros((len(taus), gridsize))
+    y_grid = np.zeros((len(taus), gridsize))
+    for j, t in enumerate(taus.index):
+        df_small = df[df.tau == t]   # need this because rookley_fixtau doesnt work
+        M_min, M_max = min(df_small.M), max(df_small.M)
+        M = np.linspace(M_min, M_max, gridsize)
+        M_std_min, M_std_max = min(df_small.M_std), max(df_small.M_std)
+        M_std = np.linspace(M_std_min, M_std_max, num=num)
+        x_3d = M_std
+        x_grid[j] = x_3d
+        y_grid[j] = t
+        print('tau ', t, df_small.shape)
+        for i, m in enumerate(x_3d):
+            sig[j, i] = smoothing_rookley(df_small, m, t, h, h, kernel)
+
+    smile = sig[:, :, 0]
+
+    surface_plot(x_3d, y_3d, smile)
+
+    return x_3d, y_3d, smile
+
+
+def rookley_fixtau(df, tau, h_m, h_t=0.1, gridsize=50, kernel='epak'):
+
+    if kernel=='epak':
+        kernel = epanechnikov
+    elif kernel=='gauss':
+        kernel = gaussian_kernel
+    else:
+        print('kernel not know, use epanechnikov')
+        kernel = epanechnikov
+
+    num = gridsize
+    M_min, M_max = min(df.M), max(df.M)
+    M = np.linspace(M_min, M_max, gridsize)
+    M_std_min, M_std_max = min(df.M_std), max(df.M_std)
+    M_std = np.linspace(M_std_min, M_std_max, num=num)
+
+    x = M_std
+    sig = np.zeros((num, 3))
+    for i, m in enumerate(x):
+        sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
+
+    smile = sig[:, 0]
+    first = sig[:, 1] / np.std(df.M)
+    second = sig[:, 2] / np.std(df.M)
+
+    S_min, S_max = min(df.S), max(df.S)
+    K_min, K_max = min(df.K), max(df.K)
+    S = np.linspace(S_min, S_max, gridsize)
+    K = np.linspace(K_min, K_max, gridsize)
+
+    return smile, first, second, M, S, K, M_std
