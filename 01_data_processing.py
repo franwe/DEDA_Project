@@ -20,14 +20,17 @@ trades['datetime'] = trades.timestamp.apply(lambda ts:
                                             datetime.fromtimestamp(ts/1000.0))
 trades['date'] = trades.datetime.apply(lambda d: datetime.date(d))
 
-start = datetime(2020, 3, 23).date()
-stop = datetime(2020, 3, 30).date()
+t = trades.groupby(by='date').mean()
+t.to_csv(data_path + 'BTC-prices.csv')
+
+start = datetime(2020, 1, 23).date()
+stop = datetime(2020, 3, 9).date()
 
 trades_small = trades[(trades.date >= start) & (trades.date < stop)]
-trades_small.to_csv(data_path + 'trades_3.csv')
+trades_small.to_csv(data_path + 'trades_0.csv')
 
 # load smaller dataset, data cleaning from here
-trades = pd.read_csv(data_path + 'trades_2.csv')
+trades = pd.read_csv(data_path + 'trades_0.csv')
 
 trades['option'] = trades.instrument_name.apply(lambda s:
                                                 s.split('-')[3])
@@ -64,5 +67,5 @@ calls = trades[trades.option == 'C'][['date', 'P', 'S', 'K', 'tau', 'tau_day',
 puts = trades[trades.option == 'P'][['date', 'P', 'S', 'K', 'tau', 'tau_day',
                                      'iv', 'M', 'M_std', 'r']]
 
-calls.to_csv(data_path + 'calls_2.csv')
-puts.to_csv(data_path + 'puts_2.csv')
+calls.to_csv(data_path + 'calls_0.csv')
+puts.to_csv(data_path + 'puts_0.csv')

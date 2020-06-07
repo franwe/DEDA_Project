@@ -58,8 +58,8 @@ def epanechnikov(M, m, h_m, T, t, h_t):
 
 
 def smoothing_rookley(df, m, t, h_m, h_t, kernel=gaussian_kernel):
-    # M = np.array(df.M)
-    M = np.array(df.M_std)
+    M = np.array(df.M)
+    # M = np.array(df.M_std)
     T = np.array(df.tau)
     y = np.array(df.iv)
     n = df.shape[0]
@@ -119,8 +119,8 @@ def rookley(df, h_m, h_t=0.1, gridsize=50, kernel='epak'):
 # ---------------- TRY MATMUL ------ Rookley + Haerdle (Applied Quant. Finance)
 def smoothing_matmul(df, t, h_m, h_t, gridsize=50, kernel=gaussian_kernel):
     """ works, but surprisingly slow. Slower than for-loop """
-    # M = np.array(df.M)
-    M = list(df.M_std)
+    M = np.array(df.M)
+    # M = list(df.M_std)
     m = list(np.linspace(min(M), max(M), 5))
     T = list(df.T)
     y = list(df.iv)
@@ -169,7 +169,6 @@ def gaussian_kernel(M, m, h_m, T, t, h_t):
 def epanechnikov(M, m, h_m, T, t, h_t):
     u_m = (M-m)/h_m
     u_t = (T-t)/h_t
-    print(sum(u_t))
     return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
 
 
@@ -214,7 +213,7 @@ def iv_smoothing(df, h, gridsize=50, kernel='epak'):
     return x_3d, y_3d, smile
 
 
-def rookley_fixtau(df, tau, h_m, h_t=0.1, gridsize=50, kernel='epak'):
+def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
 
     if kernel=='epak':
         kernel = epanechnikov
@@ -230,14 +229,15 @@ def rookley_fixtau(df, tau, h_m, h_t=0.1, gridsize=50, kernel='epak'):
     M_std_min, M_std_max = min(df.M_std), max(df.M_std)
     M_std = np.linspace(M_std_min, M_std_max, num=num)
 
-    x = M_std
+    x = M
+    # x = M_std
     sig = np.zeros((num, 3))
     for i, m in enumerate(x):
         sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
 
     smile = sig[:, 0]
-    first = sig[:, 1] / np.std(df.M)
-    second = sig[:, 2] / np.std(df.M)
+    first = sig[:, 1] # / np.std(df.M)
+    second = sig[:, 2] # / np.std(df.M)
 
     S_min, S_max = min(df.S), max(df.S)
     K_min, K_max = min(df.K), max(df.K)
