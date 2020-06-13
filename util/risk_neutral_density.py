@@ -107,7 +107,6 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
 
 def spd_sfe(m, s, X, sigma, sigma1, sigma2, r, tau):
     """ from SFE_RND_HD """
-    rm = len(m)
     st = np.sqrt(tau)
     ert = np.exp(r * tau)
     rt = r * tau

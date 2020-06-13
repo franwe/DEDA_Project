@@ -2,8 +2,6 @@ import os
 import pandas as pd
 import pickle
 
-from matplotlib import pyplot as plt
-
 from util.smoothing import locpoly_r, rookley_fixtau
 from util.risk_neutral_density import spd_sfe, spd_appfinance, spd_rookley
 
@@ -13,13 +11,19 @@ data_path = cwd + 'data' + os.sep
 # ------------------------------------------------------------------------ MAIN
 
 # ------------------------------------------------------------------- LOAD DATA
-d = pd.read_csv(data_path + 'calls_3.csv')
+d = pd.read_csv(data_path + 'calls_1.csv')
+print('exclude values with too big or too smal Moneyness : ',
+      sum(d.M > 1.3) +  sum(d.M <= 0.7))
+d = d[d.M <= 1.2]  # filter out Moneyness bigger than 1.3
+d = d[d.M > 0.7]   # filter out Moneyness small than 0.7
+
 print(d.date.value_counts())
-day = '2020-03-29'
+day = '2020-03-11'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
 res = dict()
 num = 50
+
 
 for tau_day in df.tau_day.value_counts().index:
     print(tau_day)

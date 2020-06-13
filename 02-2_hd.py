@@ -4,6 +4,7 @@ matplotlib.use('Agg')
 import os
 import numpy as np
 from matplotlib import pyplot as plt
+import pyplot
 import pandas as pd
 import imageio
 
@@ -14,18 +15,54 @@ cwd = os.getcwd() + os.sep
 
 # ------------------------------------------------------------------- LOAD DATA
 data_path = cwd + 'data' + os.sep
-d = pd.read_csv(data_path + 'BTCUSDT.csv')
+d_usd = pd.read_csv(data_path + 'BTCUSDT.csv')
 
 # -------------------------------------------------------------------- SETTINGS
 target = 'Adj.Close'
-tau_day = 10
+tau_day = 9
 M = 10000
 h = 0.1
 day = '2020-03-29'
-S0 = d.loc[d.Date == day, target].iloc[0]
+day = '2020-03-11'
+S0 = d_usd.loc[d_usd.Date == day, target].iloc[0]
 S = np.linspace(S0*0.3, S0*2, num=500)
 
 # ------------------------------------------------------------ COMPUTE AND PLOT
+# ----------------------------------------------------------------- TIME SERIES
+import math
+
+fig1 = plt.figure(figsize=(6, 4))
+ax = fig1.add_subplot(111)
+plt.xticks(rotation=45)
+
+ax.plot(d_usd.Date, d_usd[target])
+locs, labels = plt.xticks()
+
+locs_new = []
+labels_new = []
+for i in range(0, 10):
+    j = i*math.floor(len(locs)/10)
+    locs_new.append(j)
+    labels_new.append(labels[i])
+
+ax.set_xticks(locs_new)
+ax.set_xticklabels(labels_new)
+plt.tight_layout()
+
+fig1.savefig(data_path + 'BTC_17-20.png', transparent=True)
+
+xticks(np.arange(12), calendar.month_name[1:13], rotation=20)
+
+pyplot.locator_params(axis='x', nbins=10)
+
+fig2 = plt.figure(figsize=(6, 4))
+ax = fig2.add_subplot(111)
+
+end = 900
+scat = historical_returns[-end:]/S0
+ax.scatter(np.arange(0,end), scat, 2)
+pyplot.locator_params(axis='x', nbins=10)
+
 
 # ----------------------------------------------------------- DIFFERENT KERNELS
 
@@ -55,7 +92,7 @@ def density_plot(tau_day):
     h_MC = 0.1
     h_SVCJ = 0.02
 
-    sample_MC = MC_return(d, target, tau_day, S0, M)
+    sample_MC = MC_return(d_usd, target, tau_day, S0, M)
     # sample_SVCJ, processes = SVCJ(tau_day, S0, M, myseed=1)
 
     fig2 = plt.figure(figsize=(4, 4))
@@ -68,8 +105,8 @@ def density_plot(tau_day):
         S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
         hd = density_estimation(sample, S, S0, h, kernel='epanechnikov')
         ax.plot(S, hd, '-', label=name)
-    ax.set_xlim(1000, 12000)
-    ax.set_ylim(0, 0.0011)
+    ax.set_xlim(S0*0.3, S0*1.7)
+    ax.set_ylim(0, 0.00085)
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(tau_day),
          horizontalalignment='right',
          verticalalignment='top',
@@ -85,7 +122,7 @@ def density_plot(tau_day):
 
 kwargs_write = {'fps': 5.0, 'quantizer': 'nq'}
 imageio.mimsave(data_path + 'HD_GIF' + os.sep + day + '_MC.gif',
-                [density_plot(tau_day) for tau_day in range(1,100)], fps=5)
+                [density_plot(tau_day) for tau_day in range(1,50+1)], fps=5)
 
 #    fig2.savefig(data_path + 'HD_GIF' + os.sep + day + '_' + str(tau_day).zfill(3) + '.png', transparent=True)
 
@@ -94,7 +131,7 @@ def plot_MC(tau_day):
     h_MC = 0.1
     h_SVCJ = 0.02
 
-    sample_MC = MC_return(d, target, tau_day, S0, M)
+    sample_MC = MC_return(d_usd, target, tau_day, S0, M)
     # sample_SVCJ, processes = SVCJ(tau_day, S0, M, myseed=1)
 
     fig2 = plt.figure(figsize=(4, 4))

@@ -15,7 +15,7 @@ def locpoly_r(df, h, h_t=0.1, gridsize=400, kernel=None):
     KernSmooth = importr('KernSmooth')
     rloc = ro.r['locpoly']
 
-    m = ro.FloatVector(list(df.M))  # Todo: need to standardize?
+    # m = ro.FloatVector(list(df.M))  # Todo: need to standardize?
     m = ro.FloatVector(list(df.M_std))
     rx = ro.FloatVector([min(df.M_std), max(df.M_std)])
     iv = ro.FloatVector(list(df.iv))
@@ -236,7 +236,7 @@ def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
         sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
 
     smile = sig[:, 0]
-    first = sig[:, 1] # / np.std(df.M)
+    first = sig[:, 1] # /np.std(df.M)
     second = sig[:, 2] # / np.std(df.M)
 
     S_min, S_max = min(df.S), max(df.S)

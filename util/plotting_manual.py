@@ -1,6 +1,11 @@
+import os
 import pickle
+from matplotlib import pyplot as plt
 
-day = '2020-03-04'
+cwd = os.getcwd() + os.sep
+data_path = cwd + 'data' + os.sep
+
+day = '2020-03-11'
 res = pickle.load(open(data_path + 'results_' + day + '.pkl', 'rb'))
 
 # ------------------------------------------------------------------ GRID PLOTS
@@ -30,7 +35,7 @@ for key, ax in zip(sorted(res), axes.flatten()):
          horizontalalignment='right',
          verticalalignment='top',
          transform=ax.transAxes)
-    # ax.set_yticks([])
+    ax.set_yticks([])
 axes.flatten()[0].set_ylabel('risk neutral density')
 axes.flatten()[4].set_ylabel('risk neutral density')
 axes.flatten()[4].set_xlabel('spot price')
@@ -38,7 +43,7 @@ axes.flatten()[5].set_xlabel('spot price')
 axes.flatten()[6].set_xlabel('spot price')
 axes.flatten()[7].set_xlabel('spot price')
 plt.tight_layout()
-fig2.savefig(data_path + day + '_RND_y.png', transparent=True)
+fig2.savefig(data_path + day + '_RND.png', transparent=True)
 
 fig3, axes = plt.subplots(2,4, figsize=(10,7))
 for key, ax in zip(sorted(res), axes.flatten()):
@@ -50,7 +55,7 @@ for key, ax in zip(sorted(res), axes.flatten()):
          horizontalalignment='right',
          verticalalignment='bottom',
          transform=ax.transAxes)
-    # ax.set_yticks([])
+    ax.set_yticks([])
 axes.flatten()[0].set_ylabel('implied volatility')
 axes.flatten()[4].set_ylabel('implied volatility')
 axes.flatten()[4].set_xlabel('moneyness')
@@ -58,7 +63,7 @@ axes.flatten()[5].set_xlabel('moneyness')
 axes.flatten()[6].set_xlabel('moneyness')
 axes.flatten()[7].set_xlabel('moneyness')
 plt.tight_layout()
-fig3.savefig(data_path + day + '_derivatives_y.png', transparent=True)
+fig3.savefig(data_path + day + '_derivatives.png', transparent=True)
 
 for key in sorted(res):
     print(res[key]['K'])
@@ -93,7 +98,7 @@ for key in res:
     fig4.savefig(data_path + day + '_' + str(key) + '.png', transparent=True)
 
 # ------------------------------------------------------------------- HISTOGRAM
-a = df[df.tau_day == 2]
+a = df[df.tau_day == 9]
 Sm = a.S.mean()
 Smin = a.S.min()
 Smax = a.S.max()
@@ -124,7 +129,7 @@ ax.plot(a.M, a.iv, 'o', ms=3)
 ax.set_xlabel(r'moneyness $M=S/K$')
 ax.set_ylabel(r'implied volatility')
 
-fig5.savefig(data_path + day + '_SKhist_2.png', transparent=True)
+fig5.savefig(data_path + day + '_SKhist_9.png', transparent=True)
 
 
 a = df
