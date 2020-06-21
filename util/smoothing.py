@@ -4,6 +4,8 @@ from scipy.stats import norm
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 
+# B-Spline
+import scipy.interpolate as interpolate
 from util.plotting import surface_plot
 
 # --------------------------------------------------------- Quantlet SFE_RND_HD
@@ -245,3 +247,15 @@ def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
     K = np.linspace(K_min, K_max, gridsize)
 
     return smile, first, second, M, S, K, M_std
+
+
+def bspline(M, smile, sections, degree=3):
+    idx = np.linspace(0, len(M) - 1, sections+1, endpoint=True).round(0).astype('int')
+    x = M[idx]
+    y = smile[idx]
+
+    t, c, k = interpolate.splrep(x, y, s=0, k=degree)
+    spline = interpolate.BSpline(t, c, k, extrapolate=True)
+    pars = {'t': t, 'c': c, 'deg': k}
+    points = {'x': x, 'y': y}
+    return pars, spline, points
