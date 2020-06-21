@@ -19,7 +19,7 @@ data_path = cwd + 'data' + os.sep
 
 # ---------------------------------------------------------- LOAD DATA ---- RND
 d = pd.read_csv(data_path + 'calls_1.csv')
-d = pd.read_csv(data_path + 'calls_1.csv')
+d = pd.read_csv(data_path + 'trades_clean.csv')
 d = d.drop('Unnamed: 0', axis=1)  # TODO: Do this in my script as well?
 d = d.drop_duplicates()
 print('exclude values with too big or too smal Moneyness : ',
@@ -34,10 +34,11 @@ print(df.tau_day.value_counts())
 res = dict()
 num = 50
 
-tau_day = 9 # 16
+tau_day = 9
 
 print(tau_day)
 df_tau = d[(d.tau_day == tau_day) & (d.date == day)]
+df_tau['M_std'] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
 h = df_tau.shape[0] ** (-1 / 9)
 tau = df_tau.tau.iloc[0]
 
@@ -59,18 +60,18 @@ tau = df_tau.tau.iloc[0]  # TODO: only works because only consider one tau,
 fig2 = plt.figure(figsize=(7, 5))
 ax = fig2.add_subplot(111)
 # for spd in [spd_rookley, spd_appfinance, spd_sfe]:
-for spd in [spd_appfinance]: # [spd_rookley, spd_appfinance, spd_sfe]:
+for spd in [spd_sfe]: # [spd_rookley, spd_appfinance, spd_sfe]:
 
-    print(spd)
     result = spd(M, S, K, smile, first, second, r, tau)
+    ax.plot(K[::-1], result)
 
-    # expand
-    exp = expand(smile, first, second, M, S, K, edge=0.4)
-    smile_long, first_long, second_long, M_long, S_long, K_long = exp
-    result_long = spd(M_long, S_long, K_long,
-                      smile_long, first_long, second_long, r, tau)
-    ax.plot(S_long, result_long, c='b', ls=':', label=str(spd))
-    ax.plot(S, result, c='b', ls='-')
+    # TODO: doesnt work anymore :-(  --- solution in bspline, need to have same add_left and add_right!
+    # # expand
+    # exp = expand(smile, first, second, M, S, K, edge=0.4)
+    # smile_long, first_long, second_long, M_long, S_long, K_long = exp
+    # result_long = spd(M_long, S_long, K_long,
+    #                   smile_long, first_long, second_long, r, tau)
+    # ax.plot(K_long[::-1], result_long, c='b', ls=':', label=str(spd))
 
 
 # -------------- HD
@@ -100,14 +101,8 @@ for name, sample in zip(['MC'], [sample_MC]):
     ax.plot(S_hd, hd, '-', c='r', label=name)
 
 ax.set_xlim(S0*0.7, S0*1.3)
-ax.set_ylim(0, 0.0005)
+# ax.set_ylim(0, 0.0005)
 ax.set_xlabel('spot price')
 plt.tight_layout()
 
 fig2.savefig(data_path + day + '_RND_HD.png', transparent=True)
-
-
-8000*0.0004
-
-# TODO: include puts also. iv is the same... bigger dataset!
-# TODO: Rookley needs to be scaled by e-rt? but r=0 anyways

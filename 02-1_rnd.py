@@ -11,7 +11,7 @@ data_path = cwd + 'data' + os.sep
 # ------------------------------------------------------------------------ MAIN
 
 # ------------------------------------------------------------------- LOAD DATA
-d = pd.read_csv(data_path + 'calls_1.csv')
+d = pd.read_csv(data_path + 'trades_clean.csv')
 print('exclude values with too big or too smal Moneyness : ',
       sum(d.M > 1.3) +  sum(d.M <= 0.7))
 d = d[d.M <= 1.2]  # filter out Moneyness bigger than 1.3
@@ -22,7 +22,7 @@ day = '2020-03-11'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
 res = dict()
-num = 50
+num = 140
 
 
 for tau_day in df.tau_day.value_counts().index:
@@ -30,6 +30,7 @@ for tau_day in df.tau_day.value_counts().index:
     df_tau = d[(d.tau_day == tau_day) & (d.date == day)]
     h = df_tau.shape[0] ** (-1 / 9)
     tau = df_tau.tau.iloc[0]
+    df_tau['M_std'] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
 
     # ------------------------------------------------------------------- SMOOTHING
     smoothing_method = locpoly_r
