@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import imageio
 
-from util.historical_density import MC_return, density_estimation
+from util.historical_density import MC_sample, density_estimation
 
 cwd = os.getcwd() + os.sep
 
@@ -59,7 +59,7 @@ h = 0.02
 fig1 = plt.figure(figsize=(6, 4))
 ax = fig1.add_subplot(111)
 
-sample = MC_return(d_usd, target, tau_day, S0, M=1000)
+sample = MC_sample(d_usd, target, tau_day, S0, M=1000)
 
 # Use 3 different kernel to estimate
 S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
@@ -77,7 +77,7 @@ def density_plot(tau_day):
     M = 10000
     h = 0.1
 
-    sample = MC_return(d_usd, target, tau_day, S0, M)
+    sample = MC_sample(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min() * 0.99, sample.max() * 1.01, num=500)
     h_s0 = h * S0
     hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
@@ -108,7 +108,7 @@ def plot_MC(tau_day):
     M = 10000
     h = 0.1
 
-    sample = MC_return(d_usd, target, tau_day, S0, M)
+    sample = MC_sample(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
     h_s0 = h*S0
     hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
