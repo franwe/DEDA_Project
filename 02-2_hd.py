@@ -1,17 +1,17 @@
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')  # turn on when want to create GIF,
+                         # otherwise will show all plots
 
 import os
+import math
 import numpy as np
 from matplotlib import pyplot as plt
-import pyplot
 import pandas as pd
 import imageio
 
-from util.historical_density import MC_return, SVCJ, density_estimation
+from util.historical_density import MC_return, density_estimation
 
 cwd = os.getcwd() + os.sep
-
 
 # ------------------------------------------------------------------- LOAD DATA
 data_path = cwd + 'data' + os.sep
@@ -29,7 +29,7 @@ S = np.linspace(S0*0.3, S0*2, num=500)
 
 # ------------------------------------------------------------ COMPUTE AND PLOT
 # ----------------------------------------------------------------- TIME SERIES
-import math
+
 
 fig1 = plt.figure(figsize=(6, 4))
 ax = fig1.add_subplot(111)
@@ -51,19 +51,6 @@ plt.tight_layout()
 
 fig1.savefig(data_path + 'BTC_17-20.png', transparent=True)
 
-xticks(np.arange(12), calendar.month_name[1:13], rotation=20)
-
-pyplot.locator_params(axis='x', nbins=10)
-
-fig2 = plt.figure(figsize=(6, 4))
-ax = fig2.add_subplot(111)
-
-end = 900
-scat = historical_returns[-end:]/S0
-ax.scatter(np.arange(0,end), scat, 2)
-pyplot.locator_params(axis='x', nbins=10)
-
-
 # ----------------------------------------------------------- DIFFERENT KERNELS
 
 tau_day = 3
@@ -72,8 +59,7 @@ h = 0.02
 fig1 = plt.figure(figsize=(6, 4))
 ax = fig1.add_subplot(111)
 
-# sample = MC_return(d, target, tau_day, S0, M=1000)
-sample, processes = SVCJ(tau_day, S0, n=1000, myseed=1)
+sample = MC_return(d_usd, target, tau_day, S0, M=1000)
 
 # Use 3 different kernel to estimate
 S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
@@ -85,32 +71,26 @@ for kernel in ['gaussian', 'tophat', 'epanechnikov']:
 ax.scatter(sample, np.zeros(sample.shape[0]),
            zorder=15, color='red', marker='+', alpha=0.5, label='Samples')
 
-# ---------------------------------------------------- SVCJ VS. RETURN BASED MC
+# -------------------------------------------------------------------- GIF PLOT
 
 def density_plot(tau_day):
     M = 10000
-    h_MC = 0.1
-    h_SVCJ = 0.02
+    h = 0.1
 
-    sample_MC = MC_return(d_usd, target, tau_day, S0, M)
-    # sample_SVCJ, processes = SVCJ(tau_day, S0, M, myseed=1)
+    sample = MC_return(d_usd, target, tau_day, S0, M)
+    S = np.linspace(sample.min() * 0.99, sample.max() * 1.01, num=500)
+    h_s0 = h * S0
+    hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
 
     fig2 = plt.figure(figsize=(4, 4))
     ax = fig2.add_subplot(111)
-    # for name, sample, h in zip(['MC', 'SVCJ'], [sample_MC, sample_SVCJ],
-    #                            [h_MC, h_SVCJ]):
-
-    for name, sample, h in zip(['MC'], [sample_MC],
-                                   [h_MC]):
-        S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
-        hd = density_estimation(sample, S, S0, h, kernel='epanechnikov')
-        ax.plot(S, hd, '-', label=name)
-    ax.set_xlim(S0*0.3, S0*1.7)
-    ax.set_ylim(0, 0.00085)
+    ax.plot(S, hd, '-')
+    ax.set_xlim(1000, 12000)
+    ax.set_ylim(0, 0.0011)
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(tau_day),
-         horizontalalignment='right',
-         verticalalignment='top',
-         transform=ax.transAxes)
+            horizontalalignment='right',
+            verticalalignment='top',
+            transform=ax.transAxes)
     ax.set_xlabel('spot price')
     plt.tight_layout()
 
@@ -124,26 +104,18 @@ kwargs_write = {'fps': 5.0, 'quantizer': 'nq'}
 imageio.mimsave(data_path + 'HD_GIF' + os.sep + day + '_MC.gif',
                 [density_plot(tau_day) for tau_day in range(1,50+1)], fps=5)
 
-#    fig2.savefig(data_path + 'HD_GIF' + os.sep + day + '_' + str(tau_day).zfill(3) + '.png', transparent=True)
-
 def plot_MC(tau_day):
     M = 10000
-    h_MC = 0.1
-    h_SVCJ = 0.02
+    h = 0.1
 
-    sample_MC = MC_return(d_usd, target, tau_day, S0, M)
-    # sample_SVCJ, processes = SVCJ(tau_day, S0, M, myseed=1)
+    sample = MC_return(d_usd, target, tau_day, S0, M)
+    S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
+    h_s0 = h*S0
+    hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
 
     fig2 = plt.figure(figsize=(4, 4))
     ax = fig2.add_subplot(111)
-    # for name, sample, h in zip(['MC', 'SVCJ'], [sample_MC, sample_SVCJ],
-    #                            [h_MC, h_SVCJ]):
-
-    for name, sample, h in zip(['MC'], [sample_MC],
-                                   [h_MC]):
-        S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
-        hd = density_estimation(sample, S, S0, h, kernel='epanechnikov')
-        ax.plot(S, hd, '-', label=name)
+    ax.plot(S, hd, '-')
     ax.set_xlim(1000, 12000)
     ax.set_ylim(0, 0.0011)
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(tau_day),
