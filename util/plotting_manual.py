@@ -27,10 +27,11 @@ axes.flatten()[7].set_xlabel('moneyness')
 plt.tight_layout()
 fig1.savefig(data_path + day + '_smiles.png', transparent=True)
 
+
 fig2, axes = plt.subplots(2,4, figsize=(10,7))
 for key, ax in zip(sorted(res), axes.flatten()):
     print(key, ax)
-    ax.plot(res[key]['S'], res[key]['q'])
+    ax.plot(res[key]['K'][::-1], res[key]['q'])
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(key),
          horizontalalignment='right',
          verticalalignment='top',
@@ -44,6 +45,7 @@ axes.flatten()[6].set_xlabel('spot price')
 axes.flatten()[7].set_xlabel('spot price')
 plt.tight_layout()
 fig2.savefig(data_path + day + '_RND.png', transparent=True)
+
 
 fig3, axes = plt.subplots(2,4, figsize=(10,7))
 for key, ax in zip(sorted(res), axes.flatten()):

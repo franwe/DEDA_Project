@@ -21,7 +21,6 @@ def expand_X(X, add_left, add_right):
     left = np.arange(X.min()-step_size, 0,  -step_size)[:add_left][::-1]
     right = np.arange(X.max()+step_size, X.max()*3, step_size)[:add_right]
     X_long = np.hstack([left, X, right])
-    print(len(left), len(right), len(X_long))
     return X_long, left, right
 
 
