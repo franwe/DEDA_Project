@@ -42,8 +42,6 @@ def implied_volatility(P, S, K, r, T, option, sigma, iterations,
     # did we stop because of convergance, or because max iterations
     if abs(diff_after) > convergance_threshold:
         print('reached max_iterations: ', i, K, sigma, diff_after)
-    # else:
-    # print('reached converance threshold after iteration: ', i)
 
     return (sigma)
 
@@ -53,7 +51,7 @@ def implied_volatility(P, S, K, r, T, option, sigma, iterations,
 
 # ------------------------------------------------------------------- LOAD DATA
 d = pd.read_csv(data_path + 'calls_1.csv')
-d = d.drop('Unnamed: 0', axis=1)  # TODO: Do this in my script as well?
+d = d.drop('Unnamed: 0', axis=1)
 d = d.drop_duplicates()
 
 # print('exclude values with too big or too smal Moneyness : ',

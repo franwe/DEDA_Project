@@ -18,9 +18,8 @@ data_path = cwd + 'data' + os.sep
 # ------------------------------------------------------------------------ MAIN
 
 # ---------------------------------------------------------- LOAD DATA ---- RND
-d = pd.read_csv(data_path + 'calls_1.csv')
 d = pd.read_csv(data_path + 'trades_clean.csv')
-d = d.drop('Unnamed: 0', axis=1)  # TODO: Do this in my script as well?
+d = d.drop('Unnamed: 0', axis=1)
 d = d.drop_duplicates()
 print('exclude values with too big or too smal Moneyness : ',
       sum(d.M > 1.3) + sum(d.M <= 0.7))

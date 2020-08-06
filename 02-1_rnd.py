@@ -47,7 +47,7 @@ for tau_day in df.tau_day.value_counts().index:
     # --------------------------------------------------------------- CALCULATE SPD
     r = df.r.iloc[0]
     tau = df_tau.tau.iloc[0]  # TODO: only works because only consider one tau,
-                          # no surface
+                              # no surface
 
     # has to be M because M_std can be negative, but need log(M)
 

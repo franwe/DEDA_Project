@@ -16,11 +16,10 @@ def inst2date(s):
 # load whole dataset, filter for start-stop date and save smaller dataset
 trades = pd.read_csv(data_path + 'Deribit_transactions_test.csv')
 
-# d = d.drop('Unnamed: 0', axis=1)  # TODO: Do this in my script as well?
 trades = trades.drop('trade_id', axis=1)
 trades = trades.drop_duplicates()
 
-trades = trades[trades.iv > 0] # TODO: take out iv == 0 (and also 5? not so far)
+trades = trades[trades.iv > 0] # TODO: and also 5? not so far
 trades['datetime'] = trades.timestamp.apply(lambda ts:
                                             datetime.fromtimestamp(ts/1000.0))
 trades['date'] = trades.datetime.apply(lambda d: datetime.date(d))

@@ -20,7 +20,7 @@ data_path = cwd + 'data' + os.sep
 
 # ---------------------------------------------------------- LOAD DATA ---- RND
 d = pd.read_csv(data_path + 'trades_clean.csv')
-d = d.drop('Unnamed: 0', axis=1)  # TODO: Do this in my script as well?
+d = d.drop('Unnamed: 0', axis=1)
 d = d.drop_duplicates()
 print('exclude values with too big or too smal Moneyness : ',
       sum(d.M > 1.3) + sum(d.M <= 0.7))
@@ -116,7 +116,3 @@ ax2.plot(M, smile)
 ax2.plot(M_long, spline(M_long), ':', c='tab:blue')
 ax2.plot(M_long, first_long)
 ax2.plot(M_long, second_long)
-
-# TODO: add put prices
-# TODO: bspline timeseries for one tau
-# TODO: not all BTCUSD, only last... ? year? or not?
