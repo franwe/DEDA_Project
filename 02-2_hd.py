@@ -59,33 +59,32 @@ h = 0.02
 fig1 = plt.figure(figsize=(6, 4))
 ax = fig1.add_subplot(111)
 
-sample = MC_sample(d_usd, target, tau_day, S0, M=1000)
+sample = MC_sample(d_usd, target, tau_day, S0, M=10000)
 
 # Use 3 different kernel to estimate
 S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
 for kernel in ['gaussian', 'tophat', 'epanechnikov']:
-    hd = density_estimation(sample, S, S0, h, kernel)
+    S = np.linspace(sample.min() * 0.99, sample.max() * 1.01, num=500)
+    h_s0 = h * S0
+    hd = density_estimation(sample, S, h_s0, kernel=kernel)
     ax.plot(S, hd, '-')
 
 # Scatter plot of data samples and histogram
 ax.scatter(sample, np.zeros(sample.shape[0]),
            zorder=15, color='red', marker='+', alpha=0.5, label='Samples')
 
+
 # -------------------------------------------------------------------- GIF PLOT
-
-def density_plot(tau_day):
-    M = 10000
-    h = 0.1
-
+def density_plot(tau_day, S0, M=10000, h=0.1, kernel='epanechnikov'):
     sample = MC_sample(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min() * 0.99, sample.max() * 1.01, num=500)
     h_s0 = h * S0
-    hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
+    hd = density_estimation(sample, S, h_s0, kernel=kernel)
 
     fig2 = plt.figure(figsize=(4, 4))
     ax = fig2.add_subplot(111)
     ax.plot(S, hd, '-')
-    ax.set_xlim(1000, 12000)
+    ax.set_xlim(0.12*S0, 1.5*S0)
     ax.set_ylim(0, 0.0011)
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(tau_day),
             horizontalalignment='right',
@@ -100,23 +99,23 @@ def density_plot(tau_day):
     image = image.reshape(fig2.canvas.get_width_height()[::-1] + (3,))
     return image
 
+# create gif
 kwargs_write = {'fps': 5.0, 'quantizer': 'nq'}
 imageio.mimsave(data_path + 'HD_GIF' + os.sep + day + '_MC.gif',
                 [density_plot(tau_day) for tau_day in range(1,50+1)], fps=5)
 
-def plot_MC(tau_day):
-    M = 10000
-    h = 0.1
 
+# -------------------------------------------------------------------- GIF PLOT
+def plot_MC(tau_day, M=10000, h=0.1, kernel='epanechnikov'):
     sample = MC_sample(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
     h_s0 = h*S0
-    hd = density_estimation(sample, S, h_s0, kernel='epanechnikov')
+    hd = density_estimation(sample, S, h_s0, kernel=kernel)
 
     fig2 = plt.figure(figsize=(4, 4))
     ax = fig2.add_subplot(111)
     ax.plot(S, hd, '-')
-    ax.set_xlim(1000, 12000)
+    ax.set_xlim(0.12*S0, 1.5*S0)
     ax.set_ylim(0, 0.0011)
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(tau_day),
          horizontalalignment='right',
