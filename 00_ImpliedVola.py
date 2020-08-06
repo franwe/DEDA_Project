@@ -9,7 +9,7 @@ data_path = cwd + 'data' + os.sep
 
 
 def BSValue(S, r, sigma, K, T, option):
-    d1 = (np.log( S /K) + (r + 0.5*sigma**2 ) *T) /(sigma * np.sqrt(T))
+    d1 = (np.log(S/K) + (r + 0.5*sigma**2)*T)/(sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
 
     if option == 'Call':
@@ -26,7 +26,8 @@ def implied_volatility(P, S, K, r, T, option, sigma, iterations,
     while (abs(diff_before) > convergance_threshold) and (i < iterations):
 
         BS_price = BSValue(S, r, sigma, K, T, option)
-        diff_after = P - BS_price  # if negative, need to lower sigma (BS was too high)
+        # if negative, need to lower sigma (BS was too high)
+        diff_after = P - BS_price
         if diff_after > 0:
             sigma *= (1 + change)
         elif diff_after < 0:
@@ -46,57 +47,58 @@ def implied_volatility(P, S, K, r, T, option, sigma, iterations,
     return (sigma)
 
 
+def calculate_iv(df_tau, start_sigma=0.5, iterations=500,
+                 convergance_threshold=10 ** (-9)):
+    calls = df_tau[df_tau.option == 'C']
+    puts = df_tau[df_tau.option == 'P']
+
+    calls['BS_iv'] = calls.apply(lambda row:
+             implied_volatility(P=row.P, S=row.S, K=row.K,
+                                r=row.r, T=row.tau,
+                                option='Call',
+                                iterations=iterations,
+                                convergance_threshold=convergance_threshold,
+                                sigma=start_sigma)
+             , axis=1)
+
+    puts['BS_iv'] = puts.apply(lambda row:
+           implied_volatility(P=row.P, S=row.S, K=row.K,
+                              r=row.r, T=row.tau,
+                              option='Put',
+                              iterations=iterations,
+                              convergance_threshold=convergance_threshold,
+                              sigma=start_sigma)
+           , axis=1)
+
+    full = pd.concat([calls, puts], axis=1)
+    return full
+
 
 # ------------------------------------------------------------------------ MAIN
-
 # ------------------------------------------------------------------- LOAD DATA
-d = pd.read_csv(data_path + 'calls_1.csv')
-d = d.drop('Unnamed: 0', axis=1)
-d = d.drop_duplicates()
-
-# print('exclude values with too big or too smal Moneyness : ',
-#       sum(d.M > 1.3) + sum(d.M <= 0.7))
-# d = d[d.M <= 1.2]  # filter out Moneyness bigger than 1.3
-# d = d[d.M > 0.7]   # filter out Moneyness small than 0.7
+d = pd.read_csv(data_path + 'trades_clean.csv')
 
 print(d.date.value_counts())
-day = '2020-03-11'
+day = '2020-03-09'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
-res = dict()
-num = 50
+tau_day = 4
 
-tau_day = 9 # 16
-
-print(tau_day)
 df_tau = d[(d.tau_day == tau_day) & (d.date == day)]
-h = df_tau.shape[0] ** (-1 / 9)
-tau = df_tau.tau.iloc[0]
+print('Calculate IV for {} options, on {} with maturity T={}.'
+      .format(df_tau.shape[0], day, tau_day))
 
 # ---------------------------------------------------------------- CALCULATE IV
-
-start_sigma = 0.5
-iterations = 500
-convergance_threshold = 10**(-9)
-
-df_tau['BS_iv'] = df_tau.apply(lambda row:
-                             implied_volatility(P = row.P,
-                                                S = row.S,
-                                                K = row.K,
-                                                r = row.r, T = row.tau, option = 'Call',  # or tau_day?
-                                                iterations = iterations,
-                                                convergance_threshold = convergance_threshold,
-                                                sigma = start_sigma)
-                             ,axis=1)
-
+full = calculate_iv(df_tau)
 
 # ------------------------------------------------------------------------ PLOT
 fig = plt.figure(figsize=(4, 3))
 ax = fig.add_subplot(111)
-ax.scatter(df_tau.M, df_tau.iv, c='tab:blue', s=6)
-ax.scatter(df_tau.M, df_tau.BS_iv, c='tab:red', s=6)
+ax.scatter(full.M, full.iv, c='tab:blue', s=6)
+ax.scatter(full.M, full.BS_iv, c='tab:red', s=6)
 ax.set_xlabel('Moneyness')
 ax.set_ylabel('implied Volatility [%]')
 plt.tight_layout()
 
-fig.savefig(data_path + 'ImpliedVola.png', transparent=True)
+fig.savefig(data_path + 'ImpliedVola_{}_T{}.png'.format(day,tau_day),
+            transparent=True)
