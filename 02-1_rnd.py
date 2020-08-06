@@ -3,8 +3,8 @@ import pandas as pd
 import pickle
 import numpy as np
 
-from util.smoothing import locpoly_r, rookley_fixtau
-from util.risk_neutral_density import spd_sfe, spd_appfinance, spd_rookley
+from util.smoothing import rookley_fixtau
+from util.risk_neutral_density import spd_appfinance
 
 cwd = os.getcwd() + os.sep
 data_path = cwd + 'data' + os.sep
@@ -34,28 +34,16 @@ for tau_day in df.tau_day.value_counts().index:
     df_tau['M_std'] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
 
     # ------------------------------------------------------------------- SMOOTHING
-    smoothing_method = locpoly_r
     smoothing_method = rookley_fixtau
     smile, first, second, M, S, K, M_std = smoothing_method(df_tau, tau, h, h_t=0.1,
                                                      gridsize=num, kernel='epak')
 
-    # plt.plot(df_tau.M, df_tau.iv, 'ro', ms=3, alpha=0.3)
-    # plt.plot(M, smile)
-
-    # plt.plot(M_std, first)
-    # plt.plot(M_std, second)
-
     # --------------------------------------------------------------- CALCULATE SPD
     r = df.r.iloc[0]
-    tau = df_tau.tau.iloc[0]  # TODO: only works because only consider one tau,
-                              # no surface
+    tau = df_tau.tau.iloc[0]
 
-    # has to be M because M_std can be negative, but need log(M)
-
-    for spd in [spd_appfinance]: # [spd_rookley, spd_appfinance, spd_sfe]:
-        print(spd)
-        result = spd(M, S, K, smile, first, second, r, tau)
-        # plt.plot(K, result)
+    spd = spd_appfinance
+    result = spd(M, S, K, smile, first, second, r, tau)
 
     res.update({tau_day : {'df': df_tau[['M', 'iv', 'S', 'K']],
                 'M_std': M_std,

@@ -67,10 +67,6 @@ axes.flatten()[7].set_xlabel('moneyness')
 plt.tight_layout()
 fig3.savefig(data_path + day + '_derivatives.png', transparent=True)
 
-for key in sorted(res):
-    print(res[key]['K'])
-
-
 # ----------------------------------------------------------------- TAU PROCESS
 for key in res:
     s = res[key]

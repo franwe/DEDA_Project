@@ -79,10 +79,10 @@ def calculate_iv(df_tau, start_sigma=0.5, iterations=500,
 d = pd.read_csv(data_path + 'trades_clean.csv')
 
 print(d.date.value_counts())
-day = '2020-03-09'
+day = '2020-03-08'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
-tau_day = 4
+tau_day = 5
 
 df_tau = d[(d.tau_day == tau_day) & (d.date == day)]
 print('Calculate IV for {} options, on {} with maturity T={}.'
