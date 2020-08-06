@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import pickle
+import numpy as np
 
 from util.smoothing import locpoly_r, rookley_fixtau
 from util.risk_neutral_density import spd_sfe, spd_appfinance, spd_rookley
