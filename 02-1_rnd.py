@@ -33,12 +33,12 @@ for tau_day in df.tau_day.value_counts().index:
     tau = df_tau.tau.iloc[0]
     df_tau['M_std'] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
 
-    # ------------------------------------------------------------------- SMOOTHING
+    # --------------------------------------------------------------- SMOOTHING
     smoothing_method = rookley_fixtau
-    smile, first, second, M, S, K, M_std = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                     gridsize=num, kernel='epak')
+    smile, first, second, M, S, K = smoothing_method(df_tau, tau, h,
+                                        h_t=0.1, gridsize=num, kernel='epak')
 
-    # --------------------------------------------------------------- CALCULATE SPD
+    # ----------------------------------------------------------- CALCULATE SPD
     r = df.r.iloc[0]
     tau = df_tau.tau.iloc[0]
 

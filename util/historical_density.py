@@ -2,9 +2,9 @@ import numpy as np
 from sklearn.neighbors import KernelDensity
 
 
-def MC_sample(data, target, tau_day, S0, M=10000):
+def sampling(data, target, tau_day, S0, M=10000):
     """
-    Creates a Monte Carlo sample of size M for price at maturity based on
+    Creates a Bootstrap sample of size M for price at maturity based on
     historical returns.
     ------- :
     data    : dataframe of time series, already cut to time-window of interest

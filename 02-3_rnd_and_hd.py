@@ -1,15 +1,14 @@
 import os
 import pandas as pd
 import numpy as np
-import pickle
-import math
+
 
 from matplotlib import pyplot as plt
 
-from util.smoothing import locpoly_r, rookley_fixtau
-from util.risk_neutral_density import spd_sfe, spd_appfinance, spd_rookley
+from util.smoothing import rookley_fixtau
+from util.risk_neutral_density_bu import spd_sfe, spd_appfinance, spd_rookley
 from util.expand import expand
-from util.historical_density import MC_return, SVCJ, density_estimation
+from util.historical_density import density_estimation
 
 
 cwd = os.getcwd() + os.sep
@@ -42,7 +41,6 @@ h = df_tau.shape[0] ** (-1 / 9)
 tau = df_tau.tau.iloc[0]
 
 # ------------------------------------------------------------------- SMOOTHING
-smoothing_method = locpoly_r
 smoothing_method = rookley_fixtau
 smile, first, second, M, S, K, M_std = smoothing_method(df_tau, tau, h, h_t=0.1,
                                                  gridsize=num, kernel='epak')
@@ -88,7 +86,6 @@ S0 = d_usd.loc[d_usd.Date == day, target].iloc[0]
 # S = np.linspace(S0*0.3, S0*2, num=500)
 
 sample_MC = MC_return(d_usd, target, tau_day, S0, n)
-sample_SVCJ, processes = SVCJ(tau_day, S0, n, myseed=1)
 
 # fig2 = plt.figure(figsize=(10, 6))
 # ax = fig2.add_subplot(111)

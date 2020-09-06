@@ -88,7 +88,7 @@ def epanechnikov(M, m, h_m, T, t, h_t):
     return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
 
 
-def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
+def local_polynomial(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
 
     if kernel=='epak':
         kernel = epanechnikov
@@ -101,13 +101,9 @@ def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
     num = gridsize
     M_min, M_max = min(df.M), max(df.M)
     M = np.linspace(M_min, M_max, gridsize)
-    M_std_min, M_std_max = min(df.M_std), max(df.M_std)
-    M_std = np.linspace(M_std_min, M_std_max, num=num)
 
-    x = M
-    # x = M_std
     sig = np.zeros((num, 3))
-    for i, m in enumerate(x):
+    for i, m in enumerate(M):
         sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
 
     smile = sig[:, 0]
@@ -119,7 +115,7 @@ def rookley_fixtau(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
     S = np.linspace(S_min, S_max, gridsize)
     K = np.linspace(K_min, K_max, gridsize)
 
-    return smile, first, second, M, S, K, M_std
+    return smile, first, second, M, S, K
 
 
 def bspline(M, smile, sections, degree=3):

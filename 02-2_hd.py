@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import imageio
 
-from util.historical_density import MC_sample, density_estimation
+from util.historical_density import sampling, density_estimation
 
 cwd = os.getcwd() + os.sep
 
@@ -59,7 +59,7 @@ h = 0.02
 fig1 = plt.figure(figsize=(6, 4))
 ax = fig1.add_subplot(111)
 
-sample = MC_sample(d_usd, target, tau_day, S0, M=10000)
+sample = sampling(d_usd, target, tau_day, S0, M=10000)
 
 # Use 3 different kernel to estimate
 S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
@@ -76,7 +76,7 @@ ax.scatter(sample, np.zeros(sample.shape[0]),
 
 # -------------------------------------------------------------------- GIF PLOT
 def density_plot(tau_day, S0, M=10000, h=0.1, kernel='epanechnikov'):
-    sample = MC_sample(d_usd, target, tau_day, S0, M)
+    sample = sampling(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min() * 0.99, sample.max() * 1.01, num=500)
     h_s0 = h * S0
     hd = density_estimation(sample, S, h_s0, kernel=kernel)
@@ -107,7 +107,7 @@ imageio.mimsave(data_path + 'HD_GIF' + os.sep + day + '_MC.gif',
 
 # -------------------------------------------------------------------- GIF PLOT
 def plot_MC(tau_day, M=10000, h=0.1, kernel='epanechnikov'):
-    sample = MC_sample(d_usd, target, tau_day, S0, M)
+    sample = sampling(d_usd, target, tau_day, S0, M)
     S = np.linspace(sample.min()*0.99, sample.max()*1.01, num=500)
     h_s0 = h*S0
     hd = density_estimation(sample, S, h_s0, kernel=kernel)
@@ -128,3 +128,4 @@ def plot_MC(tau_day, M=10000, h=0.1, kernel='epanechnikov'):
 for tau_day in range(1,100):
     fig = plot_MC(tau_day)
     fig.savefig(data_path + 'HD_GIF' + os.sep + day + '_MC_' + str(tau_day).zfill(3) + '.png', transparent=True)
+

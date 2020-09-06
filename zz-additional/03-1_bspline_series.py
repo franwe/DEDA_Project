@@ -8,10 +8,9 @@ from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm
 
-from util.smoothing import locpoly_r, rookley_fixtau, bspline
-from util.risk_neutral_density import spd_sfe, spd_appfinance, spd_rookley
+from util.smoothing import local_polynomial, bspline
+from util.risk_neutral_density import spd_appfinance
 from util.expand import expand_X
-from util.historical_density import MC_sample, density_estimation
 
 import imageio
 
@@ -67,10 +66,9 @@ for tau_day, c, i in zip(taus, color, range(1, len(taus)+1)):
     r = 0
 
     # ------------------------------------------------------------------ SPD NORMAL
-    spd = spd_sfe
-    smoothing_method = locpoly_r
-    smoothing_method = rookley_fixtau
-    smile, first, second, M, S, K, M_std = smoothing_method(df_tau, tau, h, h_t=0.1,
+    spd = spd_appfinance
+    smoothing_method = local_polynomial
+    smile, first, second, M, S, K  = smoothing_method(df_tau, tau, h, h_t=0.1,
                                                      gridsize=num, kernel='epak')
     y_3d = [i]*len(K)
     result = spd(M, S, K, smile, first, second, r, tau)
@@ -94,8 +92,8 @@ def density_plot(d, day, tau_day):
     fig2 = plt.figure(figsize=(4, 4))
     ax = fig2.add_subplot(111)
     # ------------------------------------------------------------------ SPD NORMAL
-    spd = spd_sfe
-    smoothing_method = rookley_fixtau
+    spd = spd_appfinance
+    smoothing_method = local_polynomial
     smile, first, second, M, S, K, M_std = smoothing_method(df_tau, tau, h,
                                                             h_t=0.1,
                                                             gridsize=num,

@@ -11,20 +11,10 @@ from util.risk_neutral_density_bu import spd_sfe, spd_appfinance, spd_rookley
 cwd = os.getcwd() + os.sep
 data_path = cwd + 'data' + os.sep
 
-# ------------------------------------------------------------------------ MAIN
-
-# ---------------------------------------------------------- LOAD DATA ---- RND
-x = 0.1
-num = 300
-
-d = pd.read_csv(data_path + 'trades_clean.csv')
-
-# --------------------------------------- LOAD DATA ---- BTC - YESTERDAY? TODAY
-d_usd = pd.read_csv(data_path + 'BTCUSDT.csv')
 
 def plot_rnds(d, tau_day, x=0.1, num=140):
     print('exclude values outside of {} - {} Moneyness - {}/{}'.format(1-x, 1+x,
-          sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
+                                                                       sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
     df = d[(d.M <= 1+x) & (d.M > 1-x)]
 
     # ---------------------------------------------------------------- TRADING DAYS
@@ -42,6 +32,7 @@ def plot_rnds(d, tau_day, x=0.1, num=140):
 
     res = dict()
     for day, c in zip(days, color):
+        # S0 = d_usd[d_usd.Date == day]['Adj.Close'].tolist()[0]
         df_tau = df[(df.tau_day == tau_day) & (df.date == day)]
         df_tau = df_tau.reset_index()
         df_tau['M_std'] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
@@ -50,16 +41,19 @@ def plot_rnds(d, tau_day, x=0.1, num=140):
         tau = df_tau.tau.iloc[0]
         r = 0
         print('{}: {} options -- M_mean: {} -- M_std: {}'. format(day, df_tau.shape[0],
-                                                              np.mean(df_tau.M).round(3),
-                                                              np.std(df_tau.M).round(3)))
+                                                                  np.mean(df_tau.M).round(3),
+                                                                  np.std(df_tau.M).round(3)))
 
         spd = spd_appfinance
         smoothing_method = local_polynomial
         smile, first, second, M, S, K = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                     gridsize=num, kernel='epak')
+                                                         gridsize=num, kernel='epak')
+
         result = spd(M, S, K, smile, first, second, r, tau)
 
         # first many bsplines to have exactly same domain (M)
+        #
+        # M = K/S0
         pars, spline, points = bspline(M, result[::-1], sections=20, degree=2)
         M_adapted = np.linspace(1-x, 1+x, num=300)
         q = spline(M_adapted)
@@ -73,21 +67,18 @@ def plot_rnds(d, tau_day, x=0.1, num=140):
         # ax2.plot(M_adapted, q, c=c)
         ax2.plot(M_adapted, spline(M_adapted), c=c)
         ax2.text(x_pos, y_pos, str(day),
-                horizontalalignment='right',
-                verticalalignment='top',
-                transform=ax2.transAxes, c=c)
+                 horizontalalignment='right',
+                 verticalalignment='top',
+                 transform=ax2.transAxes, c=c)
         res.update({day: {'t': pars['t'], 'c': pars['c']}})
         y_pos -= 0.05
 
     return fig2, res
 
-fig2, res = plot_rnds(d, tau_day=2, x=0.1)
-
-
 
 def plot_rnds_3d(d, tau_day, x=0.1, num=140):
     print('exclude values outside of {} - {} Moneyness - {}/{}'.format(1-x, 1+x,
-          sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
+                                                                       sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
     d = d[(d.M <= 1+x) & (d.M > 1-x)]
 
     # ---------------------------------------------------------------- TRADING DAYS
@@ -109,6 +100,7 @@ def plot_rnds_3d(d, tau_day, x=0.1, num=140):
     for day in all_days:
         y_pos += 1
         df_tau = d[(d.tau_day == tau_day) & (d.date == str(day.date()))]
+        # S0 = d_usd[d_usd.Date == str(day.date())]['Adj.Close'].tolist()[0]
 
         if df_tau.shape[0] == 0:
             pass
@@ -129,16 +121,31 @@ def plot_rnds_3d(d, tau_day, x=0.1, num=140):
             spd = spd_appfinance
             smoothing_method = local_polynomial
             smile, first, second, M, S, K = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                         gridsize=num, kernel='epak')
+                                                             gridsize=num, kernel='epak')
             result = spd(M, S, K, smile, first, second, r, tau)
 
-            pars, spline, points = bspline(M, result[::-1], sections=8, degree=2)
+            # first many bsplines to have exactly same domain (M)
+            #
+            # M = S0 / K # TODO: M = S0/K
+            pars, spline, points = bspline(M, result[::-1], sections=20,
+                                           degree=2)
+            M_adapted = np.linspace(1 - x, 1 + x, num=300)
+            q = spline(M_adapted)
 
-            # ax2.scatter(points['x'], points['y'], c='r')
-            # ax2.scatter(M, result[::-1], s=2)
+            # second, few bpslines for time series
+            pars, spline, points = bspline(M_adapted, q, sections=5, degree=2)
 
-            y_3d = [y_pos] * len(M)
-            ax3.plot(M, y_3d, spline(M), c=c)
+            y_points = [y_pos] * len(points['x'])
+            # ax3.scatter(points['x'], y_points, points['y'], c='r', s=3)
+
+            y_first = [y_pos] * len(M)
+            ax3.plot(M, y_first, spline(M), c=c)
+
+            y_adapted = [y_pos] * len(M_adapted)
+            ax3.plot(M_adapted, y_adapted, spline(M_adapted), c=c, ls=':')
+
+            ax3.plot(M, y_adapted, spline(M), c=c)
+
 
     plt.yticks(rotation=90)
     new_locs = [i for i in range(0, len(all_days)) if i%5 == 0]
@@ -147,9 +154,25 @@ def plot_rnds_3d(d, tau_day, x=0.1, num=140):
     ax3.set_yticklabels(new_labels)
 
     ax3.set_xlabel('Moneyness')
+    ax3.set_zlim(0)
     return fig3
 
-fig3 = plot_rnds_3d(d, tau_day=1, x=0.2)
+# ------------------------------------------------------------------------ MAIN
+# ---------------------------------------------------------- LOAD DATA ---- RND
+d = pd.read_csv(data_path + 'trades_clean.csv')
+
+x = 0.1
+num = 300
+
+fig2, res = plot_rnds(d, tau_day=2, x=x, num=num)
+fig3 = plot_rnds_3d(d, tau_day=2, x=x, num=num)
+
+# wang, okrhin uniform confidance bands
+
+
+
+
+
 
 # TODO: cant to M, because cant compare to hd then... HD is in S... also need RND in S
 # TODO: or S/S0?
