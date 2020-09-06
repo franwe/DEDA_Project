@@ -31,7 +31,7 @@ def _loglik(pars, e):
     return loglik
 
 
-def get_returns(data, target, dt=1, mode='log'):
+def get_returns(data, target='Adj.Close', dt=1, mode='log'):
     n = data.shape[0]
     data = data.reset_index()
     first = data.loc[:n - dt - 1, target].reset_index()
@@ -93,9 +93,7 @@ def simulate(w, a, b, mu, sigma2_0, ret_0, T, S0, M=10000):
 
 
 
-def simulate_hd(data, day, tau_day, target, x=0.2):
-    S0 = d_usd.loc[d_usd.Date == day, target].iloc[0]
-
+def simulate_hd(data, S0, tau_day, target='Adj.Close', x=0.2):
     returns = get_returns(data, target, mode='log')
 
     res_mine = fit_simga(returns)
@@ -114,7 +112,7 @@ def simulate_hd(data, day, tau_day, target, x=0.2):
 
     S_domain = np.linspace((1-x)*S0, (1+x)*S0, num=100)
     hd = density_estimation(ST, S=S_domain, h=0.02*S0, kernel='epanechnikov')
-    return hd, S_domain, S0
+    return hd, S_domain
 
 
 # ------------------------------------------------------------------- LOAD DATA
