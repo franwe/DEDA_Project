@@ -3,9 +3,9 @@ from matplotlib import pyplot as plt
 
 from util.data import RndDataClass, HdDataClass
 from util.smoothing import local_polynomial, bspline
-from util.risk_neutral_density_bu import spd_sfe, spd_appfinance, spd_rookley
+from util.risk_neutral_density_bu import spd_appfinance
 from util.expand import expand_X
-# from util.garch import simulate_hd
+from util.garch import simulate_hd
 
 cwd = os.getcwd() + os.sep
 data_path = cwd + 'data' + os.sep
@@ -60,7 +60,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0):
 # -----------------------------------------------------------------------------
 day = '2020-03-06'
 tau_day = 21
-x = 0.5
+x = 0.3
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 HdData = HdDataClass(data_path + 'BTCUSDT.csv')
