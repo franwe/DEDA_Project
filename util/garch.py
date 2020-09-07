@@ -85,7 +85,7 @@ def simulate(w, a, b, mu, sigma2_0, ret_0, T, S0, M=10000):
     return ST, (s, e, S)
 
 
-def simulate_hd(data, S0, tau_day, target='Adj.Close', x=0.2):
+def simulate_hd(data, S0, tau_day, S_domain, target='Adj.Close'):
     returns = get_returns(data, target, mode='log')
 
     res_mine = fit_simga(returns)
@@ -102,6 +102,6 @@ def simulate_hd(data, S0, tau_day, target='Adj.Close', x=0.2):
 
     ST, tup = simulate(w, a, b, mu, sigma2_0, ret_0, T=tau_day, S0=S0, M=100000)
 
-    S_domain = np.linspace((1-x)*S0, (1+x)*S0, num=100)
+    # S_domain = np.linspace((1-x)*S0, (1+x)*S0, num=100)
     hd = density_estimation(ST, S=S_domain, h=0.02*S0, kernel='epanechnikov')
     return hd, S_domain
