@@ -16,12 +16,11 @@ def _ARMA(w, a, b, obs):
     return sigma2
 
 
-def _loglik(pars, e):
+def _loglik(pars, r):
     w, a, b = pars
-    sigma2 = _ARMA(w, a, b, e)
+    sigma2 = _ARMA(w, a, b, r)
 
-    loglik = -np.sum(-np.log(sigma2) - (e**2)/sigma2)  # minus because will minimize
-
+    loglik = -np.sum(-np.log(sigma2) - (r**2)/(2*sigma2))  # minus because will minimize
     return loglik
 
 
@@ -37,7 +36,7 @@ def get_returns(data, target='Adj.Close', dt=1, mode='log'):
         return historical_returns
 
 
-def fit_simga(returns):
+def fit_sigma(returns):
     pars = (0.1, 0.05, 0.92)
     res = opt.minimize(_loglik, pars, args=(returns),
                 bounds=((0.0001, None), (0.0001, None), (0.0001, None)),
@@ -88,9 +87,8 @@ def simulate(w, a, b, mu, sigma2_0, ret_0, T, S0, M=10000):
 def simulate_hd(data, S0, tau_day, S_domain, target='Adj.Close'):
     returns = get_returns(data, target, mode='log')
 
-    res_mine = fit_simga(returns)
-    print(res_mine.x)
-    w, a, b = res_mine.x
+    res = fit_sigma(returns)
+    w, a, b = res.x
 
     sigma2 = _ARMA(w, a, b, returns)
 
@@ -98,10 +96,9 @@ def simulate_hd(data, S0, tau_day, S_domain, target='Adj.Close'):
     mu = np.mean(sigma2)
     sigma2_0 = sigma2[-1]
     ret_0 = returns.iloc[-1] + mu
-    print(mu, sigma2_0, ret_0, S0)
+    print('mu: {}, sigma2_0: {}, ret_0: {}, S0: {}'.format(mu, sigma2_0, ret_0, S0))
 
     ST, tup = simulate(w, a, b, mu, sigma2_0, ret_0, T=tau_day, S0=S0, M=100000)
 
-    # S_domain = np.linspace((1-x)*S0, (1+x)*S0, num=100)
     hd = density_estimation(ST, S=S_domain, h=0.02*S0, kernel='epanechnikov')
     return hd, S_domain
