@@ -5,7 +5,6 @@ from localreg import *
 from util.data import RndDataClass, HdDataClass
 from util.smoothing import local_polynomial, bspline
 from util.risk_neutral_density_bu import spd_appfinance
-from util.expand import expand_X
 from util.garch import simulate_hd
 
 cwd = os.getcwd() + os.sep
@@ -18,7 +17,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
     tau = df_tau.tau.iloc[0]
     r = 0
 
-    fig3 = plt.figure()
+    fig3 = plt.figure(figsize=(5,4))
     ax3 = fig3.add_subplot(111)
     # ------------------------------------------------------------------ SPD NORMAL
     spd = spd_appfinance
@@ -40,7 +39,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
     a = df_tau.sort_values('M')
     M_df = a.M.values
     q_df = a.q.values
-    ax3.plot(M_df, q_df, '.', markersize=2, color='gray')
+    ax3.plot(M_df, q_df, '.', markersize=5, color='gray')
 
     y2 = localreg(M_df, q_df, degree=2, kernel=tricube, width=0.05)
     ax3.plot(M_df, y2, '-', c='r')
@@ -54,37 +53,44 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
             horizontalalignment='right',
             verticalalignment='top',
             transform=ax3.transAxes)
-    ax3.axvline(1, ls=':')
-
+    # ax3.axvline(1, ls=':')
     ax3.set_xlim(1-x, 1+x)
-    return fig3, df_tau
+    ax3.set_xlabel('Moneyness')
+    plt.tight_layout()
+    return fig3
 
 
 # -----------------------------------------------------------------------------
 day = '2020-03-11'
-day = '2020-03-20'
 tau_day = 2
-x = 0.2
+x = 0.3
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 HdData = HdDataClass(data_path + 'BTCUSDT.csv')
 RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
-# TODO: Cutoff has huge influence!!!!
+# TODO: Influence of coutoff?
 
 # ----------------------------------------------------------------------- Plots
 days = ['2020-03-11', '2020-03-20', '2020-03-29', '2020-03-06']
 taus = [2,             2,            2,            21]
 
+
 for day, tau_day in zip(days, taus):
+    print(day)
     df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
     hd_data, S0 = HdData.filter_data(date=day)
-    fig3, new = plot_2d(df_new, day, tau_day, hd_data, S0)
+    fig3 = plot_2d(df_new, day, tau_day, hd_data, S0, x=x)
+    figpath = os.path.join(data_path, 'plots', 'tau-{}_{}.png'.format(tau_day, day))
+    fig3.savefig(figpath, transparent=True)
 
 
 
+RndData.analyse('2020-03-12')
+day = '2020-03-12'
+tau_day = 2
 
-day = '2020-03-06'
-tau_day = 21
 df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
 hd_data, S0 = HdData.filter_data(date=day)
 fig3 = plot_2d(df_new, day, tau_day, hd_data, S0)
+figpath = os.path.join(data_path, 'plots', 'tau-{}_{}.png'.format(tau_day, day))
+fig3.savefig(figpath, transparent=True)

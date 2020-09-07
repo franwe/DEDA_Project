@@ -70,31 +70,33 @@ ax3 = fig3.add_subplot(111, projection='3d')
 
 y_pos = -1
 i = 0
-# for day, c, i in zip(days, color, range(0, len(days))):
 
+tau_day = 2
+day0 = '2020-03-06'
 all_days = ['2020-03-11', '2020-03-20', '2020-03-29', '2020-03-06']
+color = cm.rainbow(np.linspace(0,1,len(all_days)))
 for day in all_days:
     # day = str(day_ts.date())
     y_pos += 1
-    if df_tau.shape[0] == 0:
-        pass
-    else:
-        c = color[i]
-        i += 1
 
-        # ------------------------- CALCULATIONS
-        hd_data, S0 = HdData.filter_data(date=day)
-        S_hd = np.linspace(M_df.min() * S0, M_df.max() * S0, num=100)
-        hd, S_hd = simulate_hd(hd_data, S0, tau_day, S_domain=S_hd)
-        y_adapted = [y_pos] * len(S_hd)
-        ax3.plot(S_hd/S0, y_adapted, hd, c=c, ls='-')
+    c = color[i]
+    i += 1
 
-        plt.yticks(rotation=90)
-        new_locs = [i for i in range(0, len(all_days)) if i % 5 == 0]
-        new_labels = [str(day.date()) for i, day in
-                      zip(range(0, len(all_days)), all_days) if i % 5 == 0]
-        ax3.set_yticks(new_locs)
-        ax3.set_yticklabels(new_labels)
+    # ------------------------- CALCULATIONS
+    _hd_data, S0 = HdData.filter_data(date=day)
+    hd_data, _S0 = HdData.filter_data(date=day0)
 
-        ax3.set_xlabel('Moneyness')
-        ax3.set_zlim(0)
+    S_hd = np.linspace((1-x) * S0, (1+x) * S0, num=100)
+    hd, S_hd = simulate_hd(hd_data, S0, tau_day, S_domain=S_hd)
+    y_adapted = [y_pos] * len(S_hd)
+    ax3.plot(S_hd/S0, y_adapted, hd, c=c, ls='-')
+
+plt.yticks(rotation=90)
+new_locs = [i for i in range(0, len(all_days)) if i % 5 == 0]
+new_labels = [str(day.date()) for i, day in
+              zip(range(0, len(all_days)), all_days) if i % 5 == 0]
+ax3.set_yticks(new_locs)
+ax3.set_yticklabels(new_labels)
+
+ax3.set_xlabel('Moneyness')
+ax3.set_zlim(0)

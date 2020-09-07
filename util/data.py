@@ -23,12 +23,17 @@ class RndDataClass:
         print('Shape of limited Moneyness data: ', df.shape)
         self.complete = df
 
-    def analyse(self, date=None):
+    def analyse(self, date=None, sortby='date'):
         if date is None:
-            print(self.complete.date.value_counts())
+            counts = self.complete.date.value_counts()
+            if sortby=='date':
+                print(counts.sort_index())
+            elif sortby=='counts':
+                print(counts)
         else:
             filtered_by_date = self.complete[(self.complete.date == date)]
             print(filtered_by_date.tau_day.value_counts())
+
 
     def delete_duplicates(self):
         """
@@ -74,5 +79,4 @@ class HdDataClass:
         S0 = self.complete.loc[self.complete.Date == yesterday_str,
                                self.target].iloc[0]
         df_yesterday = self.complete[self.complete.Date <= yesterday_str]
-        print('S0: ', S0)
         return df_yesterday, S0
