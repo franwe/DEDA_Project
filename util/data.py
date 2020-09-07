@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 
 class RndDataClass:
-    def __init__(self, path, cutoff=0.1):
+    def __init__(self, path, cutoff=0.5):
         self.path = path
         self.cutoff = cutoff
         self.complete = None
@@ -33,7 +33,6 @@ class RndDataClass:
         else:
             filtered_by_date = self.complete[(self.complete.date == date)]
             print(filtered_by_date.tau_day.value_counts())
-
 
     def delete_duplicates(self):
         """
