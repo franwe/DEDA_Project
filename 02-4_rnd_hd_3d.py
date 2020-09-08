@@ -181,9 +181,9 @@ def plot_taus(day, x=0.5, mode='rnd'):
 # ------------------------------------------------------------------------ MAIN
 x = 0.5
 tau_day = 14
-
 fig2 = plot_rnds_3d(tau_day=tau_day, x=x, mode='both')
 
+day = '2020-03-11'
 RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
-RndData.analyse('2020-03-20')
-plot_taus('2020-03-20', x=0.5, mode='rnd')
+RndData.analyse(day)
+plot_taus(day, x=0.5, mode='hd')

@@ -4,6 +4,8 @@ import numpy as np
 from scipy.stats import norm
 from matplotlib import pyplot as plt
 
+from util.data import RndDataClass
+
 cwd = os.getcwd() + os.sep
 data_path = cwd + 'data' + os.sep
 
@@ -76,18 +78,20 @@ def calculate_iv(df_tau, start_sigma=0.5, iterations=500,
 
 # ------------------------------------------------------------------------ MAIN
 # ------------------------------------------------------------------- LOAD DATA
-d = pd.read_csv(data_path + 'trades_clean.csv')
+d = RndData.complete
 
 print(d.date.value_counts())
-day = '2020-03-08'
+day = '2020-03-11'
 df = d[(d.date == day)]
 print(df.tau_day.value_counts())
-tau_day = 5
+tau_day = 9
 
 df_tau = d[(d.tau_day == tau_day) & (d.date == day)]
 print('Calculate IV for {} options, on {} with maturity T={}.'
       .format(df_tau.shape[0], day, tau_day))
 
+RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
+df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
 # ---------------------------------------------------------------- CALCULATE IV
 full = calculate_iv(df_tau)
 
@@ -100,5 +104,6 @@ ax.set_xlabel('Moneyness')
 ax.set_ylabel('implied Volatility [%]')
 plt.tight_layout()
 
-fig.savefig(data_path + 'ImpliedVola_{}_T{}.png'.format(day,tau_day),
-            transparent=True)
+figpath = os.path.join(data_path, 'plots',
+                       'ImpliedVola_{}_T{}.png'.format(day,tau_day))
+fig.savefig(figpath, transparent=True)

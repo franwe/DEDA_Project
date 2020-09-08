@@ -25,13 +25,15 @@ axes.flatten()[5].set_xlabel('moneyness')
 axes.flatten()[6].set_xlabel('moneyness')
 axes.flatten()[7].set_xlabel('moneyness')
 plt.tight_layout()
-fig1.savefig(data_path + day + '_smiles.png', transparent=True)
+figpath = os.path.join(data_path, 'plots', '{}_smiles.png'.format(day))
+fig1.savefig(figpath, transparent=True)
 
 
 fig2, axes = plt.subplots(2,4, figsize=(10,7))
 for key, ax in zip(sorted(res), axes.flatten()):
     print(key, ax)
-    ax.plot(res[key]['K'][::-1], res[key]['q'])
+    ax.plot(res[key]['M_df'], res[key]['q'], '.', markersize=2)
+    ax.plot(res[key]['M_df'], res[key]['y2'])
     ax.text(0.99, 0.99, r'$\tau$ = ' + str(key),
          horizontalalignment='right',
          verticalalignment='top',
@@ -39,12 +41,13 @@ for key, ax in zip(sorted(res), axes.flatten()):
     ax.set_yticks([])
 axes.flatten()[0].set_ylabel('risk neutral density')
 axes.flatten()[4].set_ylabel('risk neutral density')
-axes.flatten()[4].set_xlabel('spot price')
-axes.flatten()[5].set_xlabel('spot price')
-axes.flatten()[6].set_xlabel('spot price')
-axes.flatten()[7].set_xlabel('spot price')
+axes.flatten()[4].set_xlabel('BTC price')
+axes.flatten()[5].set_xlabel('BTC price')
+axes.flatten()[6].set_xlabel('BTC price')
+axes.flatten()[7].set_xlabel('BTC price')
 plt.tight_layout()
-fig2.savefig(data_path + day + '_RND.png', transparent=True)
+figpath = os.path.join(data_path, 'plots', '{}_rnds.png'.format(day))
+fig2.savefig(figpath, transparent=True)
 
 
 fig3, axes = plt.subplots(2,4, figsize=(10,7))
@@ -65,7 +68,8 @@ axes.flatten()[5].set_xlabel('moneyness')
 axes.flatten()[6].set_xlabel('moneyness')
 axes.flatten()[7].set_xlabel('moneyness')
 plt.tight_layout()
-fig3.savefig(data_path + day + '_derivatives.png', transparent=True)
+figpath = os.path.join(data_path, 'plots', '{}_derivatives.png'.format(day))
+fig3.savefig(figpath, transparent=True)
 
 
 # ----------------------------------------------------------------- TAU PROCESS
@@ -87,14 +91,14 @@ for key in res:
     ax.set_ylabel('implied volatility')
 
     ax = axes[2]
-    ax.plot(s['S'], s['q'])
-    ax.set_xlabel('spot price')
+    ax.plot(s['M_df'], s['y2'])
+    ax.set_xlabel('BTC price')
     ax.set_ylabel(r'risk neutral density')
     ax.set_yticks([])
 
     plt.tight_layout()
-
-    fig4.savefig(data_path + day + '_' + str(key) + '.png', transparent=True)
+    figpath = os.path.join(data_path, 'plots', 'T-{}_{}_rnd-hist.png'.format(key, day))
+    fig4.savefig(figpath, transparent=True)
 
 
 
@@ -105,9 +109,15 @@ from matplotlib.pyplot import cm
 import numpy as np
 import pandas as pd
 
+from util.data import HdDataClass
+
+HdData = HdDataClass(data_path + 'BTCUSDT.csv')
 target = 'Adj.Close'
 days = ['2020-03-06', '2020-03-11', '2020-03-14', '2020-03-18', '2020-03-20', '2020-03-29']
-days = ['2020-03-07', '2020-03-12', '2020-03-13', '2020-03-18', '2020-04-04']
+days = ['2020-03-07', '2020-03-11', '2020-03-18', '2020-03-23', '2020-03-30', '2020-04-04'] # 2
+days = ['2020-03-07', '2020-03-14', '2020-03-21', '2020-04-04'] # 6
+days = days = ['2020-03-06', '2020-03-13', '2020-03-20', '2020-04-03'] # 14
+tau_day = 14
 colors = cm.rainbow(np.linspace(0, 1, len(days)))
 fig3, axes = plt.subplots(1,2, figsize=(10,4))
 
@@ -152,5 +162,5 @@ axes[1].set_title(r'$r_t$')
 
 plt.tight_layout()
 
-figpath = os.path.join(data_path, 'plots', 'tau-{}_GARCH.png'.format(tau_day))
+figpath = os.path.join(data_path, 'plots', 'T-{}_GARCH.png'.format(tau_day))
 fig3.savefig(figpath, transparent=True)

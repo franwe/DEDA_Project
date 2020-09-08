@@ -55,6 +55,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
             transform=ax3.transAxes)
     # ax3.axvline(1, ls=':')
     ax3.set_xlim(1-x, 1+x)
+    ax3.set_ylim(0, 0.002) # TODO: adjustable!
     ax3.set_xlabel('Moneyness')
     plt.tight_layout()
     return fig3
@@ -62,7 +63,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
 
 # -----------------------------------------------------------------------------
 day = '2020-03-11'
-tau_day = 2
+tau_day = 9
 x = 0.3
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
@@ -74,23 +75,31 @@ RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
 days = ['2020-03-11', '2020-03-20', '2020-03-29', '2020-03-06']
 taus = [2,             2,            2,            21]
 
+days = ['2020-03-07', '2020-03-11', '2020-03-18', '2020-03-23', '2020-03-30', '2020-04-04']
+taus = [2, 2,2,2,2,2]
+
+days = ['2020-03-06', '2020-03-13', '2020-03-20', '2020-04-03']
+taus = [14,             14,            14,            14]
 
 for day, tau_day in zip(days, taus):
     print(day)
     df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
     hd_data, S0 = HdData.filter_data(date=day)
     fig3 = plot_2d(df_new, day, tau_day, hd_data, S0, x=x)
-    figpath = os.path.join(data_path, 'plots', 'tau-{}_{}.png'.format(tau_day, day))
+    figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
     fig3.savefig(figpath, transparent=True)
 
 
 
-RndData.analyse('2020-03-12')
-day = '2020-03-12'
+RndData.analyse('2020-03-26')
+RndData.analyse(sortby='date')
+day = '2020-03-20'
 tau_day = 2
 
 df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
 hd_data, S0 = HdData.filter_data(date=day)
 fig3 = plot_2d(df_new, day, tau_day, hd_data, S0)
-figpath = os.path.join(data_path, 'plots', 'tau-{}_{}.png'.format(tau_day, day))
+figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
 fig3.savefig(figpath, transparent=True)
+
+figpath = os.path.join(data_path, 'plots', 'Meme.png'.format(tau_day, day))
