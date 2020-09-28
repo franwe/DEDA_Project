@@ -1,6 +1,9 @@
 import numpy as np
 from scipy.stats import norm
 
+# B-Spline
+import scipy.interpolate as interpolate
+
 # ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
 def gaussian_kernel(x, Xi, h):
     u = (x-Xi)/h
@@ -64,6 +67,19 @@ def local_polynomial(X, Y, h, gridsize=50, kernel='epak'):
     # K = np.linspace(K_min, K_max, gridsize)
 
     return fit, first, second, X_domain, f
+
+
+def bspline(M, smile, sections, degree=3):
+    idx = np.linspace(0, len(M) - 1, sections+1, endpoint=True).round(0).astype('int')
+    x = M[idx]
+    y = smile[idx]
+
+    t, c, k = interpolate.splrep(x, y, s=0, k=degree)
+    spline = interpolate.BSpline(t, c, k, extrapolate=True)
+    pars = {'t': t, 'c': c, 'deg': k}
+    points = {'x': x, 'y': y}
+    return pars, spline, points
+
 #
 # # ------------------------------------------------------------------------ MAIN
 # import os
