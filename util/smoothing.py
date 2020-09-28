@@ -128,3 +128,67 @@ def bspline(M, smile, sections, degree=3):
     pars = {'t': t, 'c': c, 'deg': k}
     points = {'x': x, 'y': y}
     return pars, spline, points
+
+
+# ----------------------------------------------------------------- WITHOUT TAU
+
+def gaussian_kernel_new(M, m, h_m):
+    u_m = (M-m)/h_m
+    return norm.cdf(u_m)
+
+
+def epanechnikov_new(M, m, h_m):
+    u_m = (M-m)/h_m
+    return 3/4 * (1-u_m)**2
+
+
+def smoothing_rookley_new(df, m, h_m, kernel=gaussian_kernel):
+    M = np.array(df.M)
+    y = np.array(df.iv)
+    n = df.shape[0]
+
+    X1 = np.ones(n)
+    X2 = M - m
+    X3 = (M-m)**2
+    X = np.array([X1, X2, X3]).T
+
+    ker = kernel(M, m, h_m)
+    W = np.diag(ker)
+
+    XTW = np.dot(X.T, W)
+
+    beta = np.linalg.pinv(np.dot(XTW, X)).dot(XTW).dot(y)
+
+    return beta[0], beta[1], 2*beta[2]
+
+
+
+
+def local_polynomial_new(df, h_m, gridsize=50, kernel='epak'):
+
+    if kernel=='epak':
+        kernel = epanechnikov
+    elif kernel=='gauss':
+        kernel = gaussian_kernel
+    else:
+        print('kernel not know, use epanechnikov')
+        kernel = epanechnikov
+
+    num = gridsize
+    M_min, M_max = min(df.M), max(df.M)
+    M = np.linspace(M_min, M_max, gridsize)
+
+    sig = np.zeros((num, 3))
+    for i, m in enumerate(M):
+        sig[i] = smoothing_rookley(df, m, h_m, kernel)
+
+    smile = sig[:, 0]
+    first = sig[:, 1]
+    second = sig[:, 2]
+
+    S_min, S_max = min(df.S), max(df.S)
+    K_min, K_max = min(df.K), max(df.K)
+    S = np.linspace(S_min, S_max, gridsize)
+    K = np.linspace(K_min, K_max, gridsize)
+
+    return smile, first, second, M, S, K
