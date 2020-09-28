@@ -3,7 +3,8 @@ from matplotlib import pyplot as plt
 from localreg import *
 
 from util.data import RndDataClass, HdDataClass
-from util.smoothing import local_polynomial, bspline
+from util.smoothing_f import local_polynomial
+from util.smoothing import bspline
 from util.risk_neutral_density_bu import spd_appfinance
 from util.garch import simulate_hd
 
@@ -12,7 +13,7 @@ data_path = cwd + 'data' + os.sep
 
 
 # --------------------------------------------------------------------- 2D PLOT
-def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
+def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3, y_lim=None):
     h = df_tau.shape[0] ** (-1 / 9)
     tau = df_tau.tau.iloc[0]
     r = 0
@@ -22,8 +23,9 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
     # ------------------------------------------------------------------ SPD NORMAL
     spd = spd_appfinance
     smoothing_method = local_polynomial
-    smile, first, second, M, S, K = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                 gridsize=140, kernel='epak')
+    X = np.array(df_tau.M)
+    Y = np.array(df_tau.iv)
+    smile, first, second, M, f = smoothing_method(X, Y, h)
 
     # ---------------------------------------- B-SPLINE on SMILE, FIRST, SECOND
     pars, spline, points = bspline(M, smile, sections=8, degree=3)
@@ -41,8 +43,8 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
     q_df = a.q.values
     ax3.plot(M_df, q_df, '.', markersize=5, color='gray')
 
-    y2 = localreg(M_df, q_df, degree=2, kernel=tricube, width=0.05)
-    ax3.plot(M_df, y2, '-', c='r')
+    fit, first, second, X_domain, f = local_polynomial(M_df, q_df, h=0.1, kernel='epak')
+    ax3.plot(X_domain, fit, '-', c='r')
 
     # ---------------------------------------------------------------------- HD
     S_hd = np.linspace(M_df.min()*S0, M_df.max()*S0, num=100)
@@ -55,7 +57,7 @@ def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
             transform=ax3.transAxes)
     # ax3.axvline(1, ls=':')
     ax3.set_xlim(1-x, 1+x)
-    ax3.set_ylim(0, 0.002) # TODO: adjustable!
+    if y_lim: ax3.set_ylim(0, y_lim)
     ax3.set_xlabel('Moneyness')
     plt.tight_layout()
     return fig3
@@ -83,23 +85,21 @@ taus = [14,             14,            14,            14]
 
 for day, tau_day in zip(days, taus):
     print(day)
-    df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
+    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
     hd_data, S0 = HdData.filter_data(date=day)
-    fig3 = plot_2d(df_new, day, tau_day, hd_data, S0, x=x)
+    fig3 = plot_2d(df_tau, day, tau_day, hd_data, S0, x=x)
     figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
     fig3.savefig(figpath, transparent=True)
 
 
 
-RndData.analyse('2020-03-26')
 RndData.analyse(sortby='date')
-day = '2020-03-20'
-tau_day = 2
+day = '2020-03-11'
+RndData.analyse(day)
+tau_day = 9
 
-df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
+df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
 hd_data, S0 = HdData.filter_data(date=day)
-fig3 = plot_2d(df_new, day, tau_day, hd_data, S0)
+fig3 = plot_2d(df_tau, day, tau_day, hd_data, S0)
 figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
 fig3.savefig(figpath, transparent=True)
-
-figpath = os.path.join(data_path, 'plots', 'Meme.png'.format(tau_day, day))

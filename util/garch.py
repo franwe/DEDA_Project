@@ -1,28 +1,11 @@
-import scipy.optimize as opt
+import os
+from random import gauss
+import matplotlib.pyplot as plt
 import numpy as np
+import time
+from arch import arch_model
 
-from util.historical_density import density_estimation
-
-
-def _ARMA(w, a, b, obs):
-    T = len(obs)
-    sigma2 = np.zeros(T)
-
-    for i in range(T):
-        if i == 0:
-            sigma2[i] = w/(1-(a+b))
-        else:
-            sigma2[i] = w + a*obs[i-1]**2 + b*sigma2[i-1]
-    return sigma2
-
-
-def _loglik(pars, r):
-    w, a, b = pars
-    sigma2 = _ARMA(w, a, b, r)
-
-    loglik = -np.sum(-np.log(sigma2) - (r**2)/(2*sigma2))  # minus because will minimize
-    return loglik
-
+cwd = os.getcwd() + os.sep
 
 def get_returns(data, target='Adj.Close', dt=1, mode='log'):
     n = data.shape[0]
@@ -36,69 +19,119 @@ def get_returns(data, target='Adj.Close', dt=1, mode='log'):
         return historical_returns
 
 
-def fit_sigma(returns):
-    pars = (0.1, 0.05, 0.92)
-    res = opt.minimize(_loglik, pars, args=(returns),
-                bounds=((0.0001, None), (0.0001, None), (0.0001, None)),
-                options={'disp':False})
-    return res
+def GARCH_fit(data):
+    model = arch_model(data, p=1, q=1)
+    res2 = model.fit(disp='off')
+
+    pars = [res2.params.mu, res2.params.omega, res2.params['alpha[1]'],
+            res2.params[
+                'beta[1]']]
+    bounds = [res2.std_err.mu, res2.std_err.omega, res2.std_err['alpha[1]'],
+              res2.std_err['beta[1]']]
+    return res2, pars, bounds
 
 
-def GARCH(w, a, b, sigma2_0, ret_0, T):
-    sigma2 = np.zeros(T)
-    residuals = np.zeros(T)
-
-    z = np.random.randn(T)  # TODO: which distribution?
-    for i in range(T):
-        if i == 0:
-            sigma2[i] = w + a*ret_0**2 + b*sigma2_0
-            residuals[i] = z[i]*np.sqrt(sigma2[i])
-        else:
-            sigma2[i] = w + a * residuals[i - 1] ** 2 + b * sigma2[i - 1]
-            residuals[i] = z[i]*np.sqrt(sigma2[i])
-    return sigma2, residuals
+def GARCH_predict(model_fit, mu, horizon=1):
+    pred = model_fit.forecast(horizon=horizon)
+    cond_std = np.sqrt(pred.variance.values[-1, :][0])
+    simulated_ret = gauss(0, 1) * cond_std + mu
+    predicted_var = np.sqrt(pred.variance.values[-1, :][0])
+    return simulated_ret, predicted_var
 
 
-def _Spath(residuals, mu, S0):
-    S = np.zeros(len(residuals))
-    returns = mu + residuals
-    for i in range(0, len(S)):
-        if i==0:
-            S[i] = S0
-        else:
-            S[i] = S[i-1] * np.exp(returns[i])
-    return S
+def rolling_prediction(data, tau_day, burnin=None, window=None, plot=False):
+    if not burnin:
+        burnin = tau_day
+
+    horizon = tau_day + burnin
+
+    if window:
+        inverseStart = horizon + window
+    else:
+        inverseStart = len(data)
+        window = len(data) - horizon
+
+    train = data[-inverseStart:-horizon]
+    test = data[-horizon:]
+
+    train = train.tolist()
+    test = test.tolist()
+    rolling_predictions = []
+    pars_2 = np.zeros([len(test), 4])  # preallocate
+    bounds_2 = np.zeros([len(test), 4])  # preallocate
+    for i in range(horizon):
+        train_window = train[-window:]
+
+        model_fit, pars, bounds = GARCH_fit(train_window)
+        bounds_2[i,:] = bounds
+        pars_2[i, :] = pars
+
+        simulated_ret, predicted_var = GARCH_predict(model_fit, mu=pars[0])
+        train.append(simulated_ret)
+        rolling_predictions.append(predicted_var)
+
+    if plot:
+        fig = plt.figure(figsize=(10,4))
+        true, = plt.plot(test, label='true return')
+        preds, = plt.plot(train[-horizon:], label='simulated return')
+        plt.title('Simulated Return - Rolling Forecast')
+        plt.legend()
+    return rolling_predictions, pars_2, bounds_2, train[-horizon:]
 
 
-def simulate(w, a, b, mu, sigma2_0, ret_0, T, S0, M=10000):
-    ST = np.zeros(M)
-    ET = np.zeros(M)
-    st = np.zeros(M)
-    for i in range(0,M):
-        s, e = GARCH(w, a, b, sigma2_0=sigma2_0, ret_0=ret_0, T=T)
-        S = _Spath(e, mu, S0=S0)
-        ST[i] = S[-1]
-        ET[i] = e[-1]
-        st[i] = s[-1]
-
-    return ST, (s, e, S)
+def analyze(x):
+    m = np.mean(x)
+    s = np.std(x)
+    print(m, s)
+    return m, s
 
 
-def simulate_hd(data, S0, tau_day, S_domain, target='Adj.Close'):
-    returns = get_returns(data, target, mode='log')
+def S_path(S0, returns, tau_day, burnin=None):
+    if not burnin:
+        burnin = tau_day
+    returns_trunc = returns[burnin:]
+    returns_trunc = [i/100 for i in returns_trunc]
+    return S0 * np.exp(sum(returns_trunc))
 
-    res = fit_sigma(returns)
-    w, a, b = res.x
 
-    sigma2 = _ARMA(w, a, b, returns)
+def simulate_GARCH_moving(log_returns, S0, tau_day, day=None, M=5000, filename=None):
+    save_data = save_data = os.path.join(cwd, 'data', '02-2_hd_GARCH')
+    tick = time.time()
+    if filename is None: filename = 'T-{}_{}_S-single.csv'.format(tau_day, day)
 
-    # Simulation
-    mu = np.mean(sigma2)
-    sigma2_0 = sigma2[-1]
-    ret_0 = returns.iloc[-1] + mu
-    print('mu: {}, sigma2_0: {}, ret_0: {}, S0: {}'.format(mu, sigma2_0, ret_0, S0))
+    S_string = ""
+    with open(save_data + filename, 'w') as file:
+        file.write("index,S\n")
 
-    ST, tup = simulate(w, a, b, mu, sigma2_0, ret_0, T=tau_day, S0=S0, M=100000)
+    for i in range(M):
+        if i%(M*0.1) == 0:
+            print('{}/{} - runtime: {} min'.format(i, M, round((time.time()-tick)/60)))
+            with open(save_data + filename, 'a') as file:
+                file.write(S_string)
+            S_string = ""
+        rolling_predictions, pars, bounds, ret_fit = rolling_prediction(log_returns,
+                                                                       tau_day,
+                                                                       plot=False)
+        S_i = S_path(S0, ret_fit, tau_day)
+        new_row = "{},{}\n".format(i, round(S_i))
+        S_string += new_row
+    return filename
 
-    hd = density_estimation(ST, S=S_domain, h=0.02*S0, kernel='epanechnikov')
-    return hd, S_domain
+
+
+# ------------------------------------------------------------- via fix horizon
+def batch_GARCH_predict(model_fit, tau_day, simulations=10000, burnin=None):
+    if not burnin:
+        burnin = tau_day
+
+    horizon = tau_day + burnin
+    res = model_fit.forecast(horizon=horizon, method='simulation', simulations=simulations)
+    returns_sim = res.simulations.values[-1,:,burnin:]
+    return returns_sim
+
+
+def batch_S(S0, returns_sim):
+    a = np.dot(np.ones((1, returns_sim.shape[1])), returns_sim.T)
+    S = S0 * np.exp(a/100)
+    return S[0]
+
