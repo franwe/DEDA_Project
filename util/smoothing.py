@@ -4,91 +4,43 @@ from scipy.stats import norm
 # B-Spline
 import scipy.interpolate as interpolate
 
-# ---------------------------------- Rookley + Haerdle (Applied Quant. Finance)
-def gaussian_kernel(M, m, h_m, T, t, h_t):
-    u_m = (M-m)/h_m
-    u_t = (T-t)/h_t
-    return norm.cdf(u_m) * norm.cdf(u_t)
+# ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
+def gaussian_kernel(x, Xi, h):
+    u = (x-Xi)/h
+    return norm.pdf(u)
 
 
-def epanechnikov(M, m, h_m, T, t, h_t):
-    u_m = (M-m)/h_m
-    u_t = (T-t)/h_t
-    return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
+def epanechnikov(x, Xi, h):
+    u = (x - Xi)/h
+    indicator = np.where(abs(u)<= 1, 1, 0)
+    k = 0.75 * (1-u**2)
+    return k * indicator
 
 
-def smoothing_rookley(df, m, t, h_m, h_t, kernel=gaussian_kernel):
-    M = np.array(df.M)
-    T = np.array(df.tau)
-    y = np.array(df.iv)
-    n = df.shape[0]
+def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
+    n = X.shape[0]
 
     X1 = np.ones(n)
-    X2 = M - m
-    X3 = (M-m)**2
-    X4 = T-t
-    X5 = (T-t)**2
-    X6 = X2*X4
-    X = np.array([X1, X2, X3, X4, X5, X6]).T
+    X2 = X - x
+    X3 = (X - x)**2
+    X_matrix = np.array([X1, X2, X3]).T
 
-    ker = kernel(M, m, h_m, T, t, h_t)
-    W = np.diag(ker)
+    K_hn = 1/h * kernel(X, x, h)
+    f_hn = 1/n * sum(K_hn)
+    W_hn = K_hn/f_hn
 
-    XTW = np.dot(X.T, W)
+    W = np.diag(W_hn)
 
-    beta = np.linalg.pinv(np.dot(XTW, X)).dot(XTW).dot(y)
+    XTW = np.dot(X_matrix.T, W)
 
-    return beta[0], beta[1], 2*beta[2]
+    beta = np.linalg.pinv(np.dot(XTW, X_matrix)).dot(XTW).dot(Y)
 
-
-def rookley(df, h_m, h_t=0.1, gridsize=50, kernel='epak'):
-
-    if kernel=='epak':
-        kernel = epanechnikov
-    elif kernel=='gauss':
-        kernel = gaussian_kernel
-    else:
-        print('kernel not know, use epanechnikov')
-        kernel = epanechnikov
-
-    num = gridsize
-    tau = df.tau.iloc[0]
-    M_min, M_max = min(df.M), max(df.M)
-    M = np.linspace(M_min, M_max, gridsize)
-    M_std_min, M_std_max = min(df.M_std), max(df.M_std)
-    M_std = np.linspace(M_std_min, M_std_max, num=num)
-
-    x = M_std
-    sig = np.zeros((num, 3))
-    for i, m in enumerate(x):
-        sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
-
-    smile = sig[:, 0]
-    first = sig[:, 1] / np.std(df.M)
-    second = sig[:, 2] / np.std(df.M)
-
-    S_min, S_max = min(df.S), max(df.S)
-    K_min, K_max = min(df.K), max(df.K)
-    S = np.linspace(S_min, S_max, gridsize)
-    K = np.linspace(K_min, K_max, gridsize)
-
-    return smile, first, second, M, S, K, M_std
+    return beta[0], beta[1], 2*beta[2], f_hn
 
 
-# ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
-def gaussian_kernel(M, m, h_m, T, t, h_t):
-    u_m = (M-m)/h_m
-    u_t = (T-t)/h_t
-    return norm.cdf(u_m) * norm.cdf(u_t)
 
 
-def epanechnikov(M, m, h_m, T, t, h_t):
-    u_m = (M-m)/h_m
-    u_t = (T-t)/h_t
-    return 3/4 * (1-u_m)**2 * 3/4 * (1-u_t)**2
-
-
-def local_polynomial(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
+def local_polynomial(X, Y, h, gridsize=50, kernel='epak'):
 
     if kernel=='epak':
         kernel = epanechnikov
@@ -98,24 +50,23 @@ def local_polynomial(df, tau, h_m, h_t=0.05, gridsize=50, kernel='epak'):
         print('kernel not know, use epanechnikov')
         kernel = epanechnikov
 
-    num = gridsize
-    M_min, M_max = min(df.M), max(df.M)
-    M = np.linspace(M_min, M_max, gridsize)
+    X_domain = np.linspace(min(X), max(X), gridsize)
 
-    sig = np.zeros((num, 3))
-    for i, m in enumerate(M):
-        sig[i] = smoothing_rookley(df, m, tau, h_m, h_t, kernel)
+    sig = np.zeros((gridsize, 4))
+    for i, x in enumerate(X_domain):
+        sig[i] = smoothing_rookley(X, Y, x, h, kernel)
 
-    smile = sig[:, 0]
+    fit = sig[:, 0]
     first = sig[:, 1]
     second = sig[:, 2]
+    f = sig[:, 3]
 
-    S_min, S_max = min(df.S), max(df.S)
-    K_min, K_max = min(df.K), max(df.K)
-    S = np.linspace(S_min, S_max, gridsize)
-    K = np.linspace(K_min, K_max, gridsize)
+    # S_min, S_max = min(df.S), max(df.S)
+    # K_min, K_max = min(df.K), max(df.K)
+    # S = np.linspace(S_min, S_max, gridsize)
+    # K = np.linspace(K_min, K_max, gridsize)
 
-    return smile, first, second, M, S, K
+    return fit, first, second, X_domain, f
 
 
 def bspline(M, smile, sections, degree=3):
@@ -129,66 +80,29 @@ def bspline(M, smile, sections, degree=3):
     points = {'x': x, 'y': y}
     return pars, spline, points
 
+#
+# # ------------------------------------------------------------------------ MAIN
+# import os
+# from matplotlib import pyplot as plt
+# from util.data import RndDataClass, HdDataClass
+# cwd = os.getcwd() + os.sep
+# data_path = cwd + 'data' + os.sep
+#
+# x = 5
+# RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
+# HdData = HdDataClass(data_path + 'BTCUSDT.csv')
+#
+# RndData.analyse("2020-03-11")
+# df_tau = RndData.filter_data("2020-03-11", 44)
+#
+# X = np.array(df_tau.M)
+# Y = np.array(df_tau.iv)
+# smile, first, second, X_domain, f = local_polynomial(X, Y, h=0.2,
+#                                                  gridsize=140, kernel='epak')
+#
+# plt.scatter(X, Y)
+# plt.plot(X_domain, smile, 'r')
+#
+# plt.plot(X_domain, f)
 
-# ----------------------------------------------------------------- WITHOUT TAU
-
-def gaussian_kernel_new(M, m, h_m):
-    u_m = (M-m)/h_m
-    return norm.cdf(u_m)
-
-
-def epanechnikov_new(M, m, h_m):
-    u_m = (M-m)/h_m
-    return 3/4 * (1-u_m)**2
-
-
-def smoothing_rookley_new(df, m, h_m, kernel=gaussian_kernel):
-    M = np.array(df.M)
-    y = np.array(df.iv)
-    n = df.shape[0]
-
-    X1 = np.ones(n)
-    X2 = M - m
-    X3 = (M-m)**2
-    X = np.array([X1, X2, X3]).T
-
-    ker = kernel(M, m, h_m)
-    W = np.diag(ker)
-
-    XTW = np.dot(X.T, W)
-
-    beta = np.linalg.pinv(np.dot(XTW, X)).dot(XTW).dot(y)
-
-    return beta[0], beta[1], 2*beta[2]
-
-
-
-
-def local_polynomial_new(df, h_m, gridsize=50, kernel='epak'):
-
-    if kernel=='epak':
-        kernel = epanechnikov
-    elif kernel=='gauss':
-        kernel = gaussian_kernel
-    else:
-        print('kernel not know, use epanechnikov')
-        kernel = epanechnikov
-
-    num = gridsize
-    M_min, M_max = min(df.M), max(df.M)
-    M = np.linspace(M_min, M_max, gridsize)
-
-    sig = np.zeros((num, 3))
-    for i, m in enumerate(M):
-        sig[i] = smoothing_rookley(df, m, h_m, kernel)
-
-    smile = sig[:, 0]
-    first = sig[:, 1]
-    second = sig[:, 2]
-
-    S_min, S_max = min(df.S), max(df.S)
-    K_min, K_max = min(df.K), max(df.K)
-    S = np.linspace(S_min, S_max, gridsize)
-    K = np.linspace(K_min, K_max, gridsize)
-
-    return smile, first, second, M, S, K
+# ---------------------------------------------------------------- BANDWIDTH CV

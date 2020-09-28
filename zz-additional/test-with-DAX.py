@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from localreg import *
 
 from util.data import RndDataClass, HdDataClass
-from util.smoothing_f import local_polynomial
+from util.smoothing import local_polynomial
 from util.smoothing import bspline
 from util.risk_neutral_density_bu import spd_appfinance, spd_sfe
 

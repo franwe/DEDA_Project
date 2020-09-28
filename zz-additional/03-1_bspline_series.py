@@ -1,10 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-import pickle
-import math
 
-from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm
 
@@ -47,8 +44,6 @@ n = 10000
 h_hd = 0.11
 S0 = d_usd.loc[d_usd.Date == day, target].iloc[0]
 
-
-from mpl_toolkits.mplot3d import Axes3D
 fig3 = plt.figure()
 ax3 = fig3.add_subplot(111)
 

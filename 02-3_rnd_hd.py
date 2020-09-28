@@ -1,12 +1,10 @@
 import os
 from matplotlib import pyplot as plt
-# from localreg import *
 import numpy as np
 
 from util.data import RndDataClass, HdDataClass
-from util.smoothing_f import local_polynomial
-from util.smoothing import bspline
-from util.risk_neutral_density_bu import spd_appfinance
+from util.smoothing import local_polynomial, bspline
+from util.risk_neutral_density import spd_appfinance
 from util.historical_density import get_hd
 
 cwd = os.getcwd() + os.sep
