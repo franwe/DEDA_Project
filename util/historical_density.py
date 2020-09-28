@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.neighbors import KernelDensity
+from scipy.integrate import simps
 
 
 def sampling(data, target, tau_day, S0, M=10000):
@@ -41,3 +42,8 @@ def density_estimation(sample, S, h, kernel='epanechnikov'):
     log_dens = kde.score_samples(S.reshape(-1, 1))
     density = np.exp(log_dens)
     return density
+
+
+def integrate(x, y):
+    print(np.trapz(y, x))
+    print(simps(y, ))
