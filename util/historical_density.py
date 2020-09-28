@@ -7,7 +7,7 @@ import os
 from util.garch import get_returns, simulate_GARCH_moving
 
 cwd = os.getcwd() + os.sep
-garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
+# garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
 
 def sampling(data, target, tau_day, S0, M=10000):
@@ -56,19 +56,33 @@ def integrate(x, y):
     print(np.trapz(y, x))
 
 
-def get_hd(HdData, day, tau_day):
-    hd_data, S0 = HdData.filter_data(day)
-    filename = 'T-{}_{}_S-single.csv'.format(tau_day, day)
+class HdCalculator:
+    def __init__(self, data, tau_day, date, S0, path, h=0.1):
+        self.data = data
+        self.tau_day = tau_day
+        self.date = date
+        self.S0 = S0
+        self.garch_data = path
+        self.h = h
+        self.filename = 'T-{}_{}_S-single.csv'.format(self.tau_day, self.date)
 
-    if os.path.exists(garch_data + filename):
-        pass
-    else:
-        log_returns = get_returns(hd_data)*100
-        filename = simulate_GARCH_moving(log_returns, S0, tau_day, day)
+        self.S = None
+        self.M = None
+        self.q_M = None
+        self.q_S = None
 
-    S_sim = pd.read_csv(os.path.join(garch_data, filename))
-    sample = np.array(S_sim['S'])
-    S = np.linspace(0.5*S0, 1.5*S0, num=100)
-    hd_single = density_estimation(sample, S, h=0.1*S0)
 
-    return hd_single, S/S0
+    def get_hd(self):
+        if os.path.exists(self.garch_data + self.filename):
+            pass
+        else:
+            log_returns = get_returns(self.data) * 100
+            self.filename = simulate_GARCH_moving(log_returns, self.S0, self.tau_day, self.date, filename=self.filename)
+
+        S_sim = pd.read_csv(os.path.join(self.garch_data, self.filename))
+        sample = np.array(S_sim['S'])
+        self.S = np.linspace(0.5 * self.S0, 1.5 * self.S0, num=100)
+        self.q_S = density_estimation(sample, self.S, h=self.h * self.S0)
+
+        self.M = np.linspace(0.5, 1.5, num=100)
+        self.q_M = density_estimation(sample/self.S0, self.M, h=self.h)
