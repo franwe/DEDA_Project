@@ -1,6 +1,13 @@
 import numpy as np
+from scipy.integrate import simps
 from sklearn.neighbors import KernelDensity
-from scipy import integrate
+import pandas as pd
+import os
+
+from util.garch import get_returns, simulate_GARCH_moving
+
+cwd = os.getcwd() + os.sep
+garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
 
 def sampling(data, target, tau_day, S0, M=10000):
@@ -45,5 +52,23 @@ def density_estimation(sample, S, h, kernel='epanechnikov'):
 
 
 def integrate(x, y):
-    print(integrate.simps(y, x))
+    print(simps(y, x))
     print(np.trapz(y, x))
+
+
+def get_hd(HdData, day, tau_day):
+    hd_data, S0 = HdData.filter_data(day)
+    filename = 'T-{}_{}_S-single.csv'.format(tau_day, day)
+
+    if os.path.exists(garch_data + filename):
+        pass
+    else:
+        log_returns = get_returns(hd_data)*100
+        filename = simulate_GARCH_moving(log_returns, S0, tau_day, day)
+
+    S_sim = pd.read_csv(os.path.join(garch_data, filename))
+    sample = np.array(S_sim['S'])
+    S = np.linspace(0.5*S0, 1.5*S0, num=100)
+    hd_single = density_estimation(sample, S, h=0.1*S0)
+
+    return hd_single, S/S0

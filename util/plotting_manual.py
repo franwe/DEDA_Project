@@ -116,7 +116,7 @@ target = 'Adj.Close'
 days = ['2020-03-06', '2020-03-11', '2020-03-14', '2020-03-18', '2020-03-20', '2020-03-29']
 days = ['2020-03-07', '2020-03-11', '2020-03-18', '2020-03-23', '2020-03-30', '2020-04-04'] # 2
 days = ['2020-03-07', '2020-03-14', '2020-03-21', '2020-04-04'] # 6
-days = days = ['2020-03-06', '2020-03-13', '2020-03-20', '2020-04-03'] # 14
+days = ['2020-03-06', '2020-03-13', '2020-03-20', '2020-04-03'] # 14
 tau_day = 14
 colors = cm.rainbow(np.linspace(0, 1, len(days)))
 fig3, axes = plt.subplots(1,2, figsize=(10,4))
@@ -141,9 +141,9 @@ for day,c in zip(days[::-1], colors):
 
     sigma2 = pd.Series(sigma2)
 
-    axes[0].plot(sigma2[920:], c=c)
+    axes[0].plot(sigma2[0:], c=c)
     axes[0].plot(sigma2[-1:], '.', c=c, ms=15)
-    axes[1].plot(returns[920:], c=c)
+    axes[1].plot(returns[0:], c=c)
     axes[1].plot(returns[-1:], '.', c=c, ms=15)
 
 
