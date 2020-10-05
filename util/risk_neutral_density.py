@@ -65,10 +65,7 @@ class RndCalculator:
 
     def _h(self):
         if self.h is None:
-            print('if')
             self.h = self.data.shape[0] ** (-1 / 9) # TODO: rethink this!
-        else:
-            print('else')
 
     # ------------------------------------------------------------------ SPD NORMAL
     def fit_smile(self):

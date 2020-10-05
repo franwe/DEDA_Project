@@ -1,62 +1,119 @@
 import numpy as np
-from scipy.integrate import simps
-from sklearn.neighbors import KernelDensity
 import pandas as pd
 import os
+from os.path import join
 
-from util.garch import get_returns, simulate_GARCH_moving
-
-cwd = os.getcwd() + os.sep
-# garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
-
-
-def sampling(data, target, tau_day, S0, M=10000):
-    """
-    Creates a Bootstrap sample of size M for price at maturity based on
-    historical returns.
-    ------- :
-    data    : dataframe of time series, already cut to time-window of interest
-              needs to have at least target column
-    target  : name of column of prices, e.g. 'Adj. Close'
-    tau_day : maturity in days (since time series is in days)
-    S0      : current price
-    M       : how many samples to draw
-    ------- :
-    return  : M prices at maturities, drawn from sample of historical returns
-    """
-    n = data.shape[0]
-    data = data.reset_index()
-    first = data.loc[:n - tau_day - 1, target].reset_index()
-    second = data.loc[tau_day:, target].reset_index()
-    historical_returns = (first / second)[target]
-    print('MC based on ', len(historical_returns), ' samples')
-    sampled_returns = np.random.choice(historical_returns, M, replace=True)
-    return S0 * sampled_returns
-
-
-def density_estimation(sample, S, h, kernel='epanechnikov'):
-    """
-    Kernel Density Estimation for domain S, based on sample
-    ------- :
-    sample  : observed sample which density will be calculated
-    S       : domain for which to calculate the sample for
-    h       : bandwidth for KDE
-    kernel  : kernel for KDE
-    ------- :
-    return  : density
-    """
-    kde = KernelDensity(kernel=kernel, bandwidth=h).fit(sample.reshape(-1, 1))
-    log_dens = kde.score_samples(S.reshape(-1, 1))
-    density = np.exp(log_dens)
-    return density
-
-
-def integrate(x, y):
-    print(simps(y, x))
-    print(np.trapz(y, x))
+from util.density import density_estimation
+from util.garch import GARCH
+#
+#
+# def _get_returns(self):
+#     n = self.data.shape[0]
+#     data = self.data.reset_index()
+#     first = data.loc[:n - 2, self.target].reset_index()
+#     second = data.loc[1:, self.target].reset_index()
+#     historical_returns = (second / first)[self.target]
+#     self.log_returns = np.log(historical_returns) * 100
+#
+#
+#     def _S_path(self, returns):
+#         returns = [i/100 for i in returns]
+#         return self.S0 * np.exp(sum(returns))
+#
+#
+#
+#
+# from util.data import HdDataClass
+#
+# HdData = HdDataClass(join(os.getcwd(), 'data', '00-raw', 'BTCUSDT.csv'))
+# day = '2020-03-06'
+# tau_day = 15
+# hd_data, S0 = HdData.filter_data(date=day)
+#
+# def get_log_returns(data, target='Adj.Close'):
+#     n = data.shape[0]
+#     data = data.reset_index()
+#     first = data.loc[:n - 2, target].reset_index()
+#     second = data.loc[1:, target].reset_index()
+#     historical_returns = (second / first)[target]
+#     return np.log(historical_returns) * 100
+#
+# def S_path(S0, returns):
+#     returns = returns/100
+#     return S0 * np.exp(sum(returns.T))
+#
+# log_returns = get_log_returns(hd_data)
+#
+# garch = GARCH(log_returns, tau_day, burnin=20, M=1000, h=0.2)
+# sigma2, z_process, pars, bounds = garch.create_Z()
+#
+# garch.simulate_paths()
+# S = S_path(S0, garch.all_returns)
+#
+# S_domain = np.linspace(S0*0.2, S0*1.8, 200)
+# q = density_estimation(S, S_domain, h=S0*0.2)
+# M = (S_domain/S0)**(-1)
+# plt.plot(M, q)
+# plt.xlim(0.5,1.5)
 
 
 class HdCalculator:
+    def __init__(self, data, tau_day, date, S0, burnin, path, M=5000, target='Adj.Close', h=0.2, overwrite=False):
+        self.data = data
+        self.target = target
+        self.tau_day = tau_day
+        self.date = date
+        self.S0 = S0
+        self.garch_data = path
+        self.h = h
+        self.burnin = burnin
+        self.M_simulations = M
+        self.filename = 'T-{}_{}_Ksim.csv'.format(self.tau_day, self.date)
+        self.overwrite = overwrite
+
+        self.log_returns = None
+        self.S = None
+        self.M = None
+        self.q_M = None
+        self.q_S = None
+
+        self._get_log_returns()
+        self.GARCH = GARCH(self.log_returns, self.tau_day, burnin=self.burnin,
+                           M=self.M_simulations, h=self.h)
+
+    def _get_log_returns(self):
+        n = self.data.shape[0]
+        data = self.data.reset_index()
+        first = data.loc[:n - 2, self.target].reset_index()
+        second = data.loc[1:, self.target].reset_index()
+        historical_returns = (second / first)[self.target]
+        self.log_returns = np.log(historical_returns) * 100
+
+    def _S_paths(self, S0, log_returns):
+        log_returns = log_returns / 100
+        self.S = S0 * np.exp(sum(log_returns.T))
+
+    def get_hd(self):
+        print(self.filename)
+        # simulate M paths
+        if os.path.exists(self.garch_data + self.filename) and (self.overwrite == False):
+            print('use existing file')
+            pass
+        else:
+            print('create new file')
+            sigma2, z_process = self.GARCH.create_Z()
+            self.GARCH.simulate_paths()
+            self._S_paths(self.S0, self.GARCH.all_returns)
+            pd.Series(self.S).to_csv(join(self.garch_data, self.filename), index=False)
+
+        self.S = pd.read_csv(join(self.garch_data, self.filename))
+        S_arr = np.array(self.S)
+        self.K = np.linspace(self.S0 * 0.2, self.S0 * 1.8, 500)
+        self.q = density_estimation(S_arr, self.K,  h=self.S0 * self.h)
+        self.M = (self.K/self.S0)**(-1)
+
+
+class HdCalculator_old:
     def __init__(self, data, tau_day, date, S0, path, h=0.1):
         self.data = data
         self.tau_day = tau_day
@@ -79,7 +136,7 @@ class HdCalculator:
             log_returns = get_returns(self.data) * 100
             self.filename = simulate_GARCH_moving(log_returns, self.S0, self.tau_day, self.date, filename=self.filename)
 
-        S_sim = pd.read_csv(os.path.join(self.garch_data, self.filename))
+        S_sim = pd.read_csv(join(self.garch_data, self.filename))
         sample = np.array(S_sim['S'])
         self.S = np.linspace(0.5 * self.S0, 1.5 * self.S0, num=100)
         self.q_S = density_estimation(sample, self.S, h=self.h * self.S0)
