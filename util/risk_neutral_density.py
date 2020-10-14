@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from util.smoothing import local_polynomial, bspline
+from util.density import density_trafo_K2M, pointwise_density_trafo_K2M
 
 def spd_appfinance(M, S, K, o, o1, o2, r, tau):
     """ from Applied Quant. Finance - Chapter 8
@@ -45,33 +46,36 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
 
 
 class RndCalculator:
-    def __init__(self, data, tau_day, date, h=None):
+    def __init__(self, data, tau_day, date, h_densfit=None, h_iv=None):
         self.data = data
         self.tau_day = tau_day
         self.date = date
-        self.h = h
-        self._h()  # parse h
+        self.h_iv = self._h(h_iv)
         self.r = 0
+        self.h_densfit = self._h(h_densfit)
 
         self.tau = self.data.tau.iloc[0]
         self.K = None
+        self.M = None
+        self.q_M = None
+        self.q_K = None
         self.M_smile = None
-        self.q_fitM = None
-        self.q_fitK = None
         self.smile = None
         self.first = None
         self.second = None
         self.f = None  #  might delete later
 
-    def _h(self):
-        if self.h is None:
-            self.h = self.data.shape[0] ** (-1 / 9) # TODO: rethink this!
+    def _h(self, h):
+        if h is None:
+            return self.data.shape[0] ** (-1 / 9) # TODO: rethink this!
+        else:
+            return h
 
     # ------------------------------------------------------------------ SPD NORMAL
     def fit_smile(self):
         X = np.array(self.data.M)
         Y = np.array(self.data.iv)
-        self.smile, self.first, self.second, self.M_smile, self.f = local_polynomial(X, Y, self.h)
+        self.smile, self.first, self.second, self.M_smile, self.f = local_polynomial(X, Y, self.h_iv)
 
     def rookley(self):
         spd = spd_appfinance
@@ -85,12 +89,20 @@ class RndCalculator:
                                                    spline(row.M), first_fct(row.M),
                                                    second_fct(row.M),
                                                    self.r, self.tau), axis=1)
-        X = np.array(self.data.M)
-        Q = np.array(self.data.q)
-        self.q_fitM, first, second, self.M, f = local_polynomial(X, Q, h=0.1,
-                                                           kernel='epak')
 
+        # step 1: Rookley results (points in K-domain) - fit density curve
         X = np.array(self.data.K)
         Q = np.array(self.data.q)
-        self.q_fitK, first, second, self.K, f = local_polynomial(X, Q, h=0.1*np.mean(X),
-                                                           kernel='epak')
+        self.q_K, first, second, self.K, f = local_polynomial(X, Q,
+                                                              h=self.h_densfit*np.mean(X),
+                                                              kernel='epak')
+
+        # step 2: transform density POINTS from K- to M-domain
+        self.data['q_M'] = pointwise_density_trafo_K2M(self.K, self.q_K, self.data.S, self.data.M)
+
+        # step 3: density points in M-domain - fit density curve
+        X = np.array(self.data.M)
+        Q = np.array(self.data.q_M)
+        self.q_M, first, second, self.M, f = local_polynomial(X, Q,
+                                                              h=self.h_densfit*np.mean(X),
+                                                              kernel='epak')

@@ -1,88 +1,67 @@
 import os
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
-import pickle
+from os.path import join
+from matplotlib.pyplot import cm
 
+from util.historical_density import HdCalculator
+from util.density import integrate
 from util.data import HdDataClass, RndDataClass
-from util.garch import get_returns, rolling_prediction, simulate_GARCH_moving, GARCH_fit, batch_GARCH_predict, batch_S
-from util.historical_density import density_estimation
-
-import sys
-# sys.path.append('/Users/franziska/briedenCloud/Studium/6Semester/DEDA/DEDA_Project')
 
 cwd = os.getcwd() + os.sep
-source_data = os.path.join(cwd, 'data', '01-processed') + os.sep
-save_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
-save_plots = os.path.join(cwd, 'plots') + os.sep
+source_data = join(cwd, 'data', '01-processed') + os.sep
+save_data = join(cwd, 'data', '02-3_rnd_hd') + os.sep
+save_plots = join(cwd, 'plots') + os.sep
+garch_data = join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
-HdData = HdDataClass(source_data + 'BTCUSDT.csv')
-hd_data = HdData.complete
-log_returns = get_returns(hd_data, mode='log')*100
-
-
-# --------------------------------- moving window over history, plot parameters
-rolling_predictions, pars, bounds, ret_fit = rolling_prediction(log_returns,
-                                                                tau_day=25,
-                                                                burnin=100,
-                                                                plot=True)
-
-fig_pars, axes = plt.subplots(4,1, figsize=(8,6))
-
-for i, name in zip(range(0,4), ['mu', 'omega', 'alpha', 'beta']):
-    axes[i].plot(pars[:,i], label='arch.arch_model', c='b')
-    # axes[i].plot(range(0, len(pars)), (pars[:, i] + 1.96*bounds[:, i]), ls=':', c='b')
-    # axes[i].plot(range(0, len(pars)), (pars[:, i] - 1.96*bounds[:, i]), ls=':', c='b')
-    axes[i].set_ylabel(name)
-axes[0].legend()
 
 
 # ---------------------------------------------------- moving window prediction
-# ------------------------------------ in future Garch-De-Garch VS. Batch Garch
 RndData = RndDataClass(source_data + 'trades_clean.csv', cutoff=0.4)
 HdData = HdDataClass(source_data + 'BTCUSDT.csv')
 day = '2020-04-03'
 RndData.analyse(day)
 M = 5000 # 5000
 
-days = ['2020-03-20', '2020-04-03', '2020-03-06']
-taus = [7,            7,            49]
 
-days = ['2020-04-03']
-taus = [7]
+def create_dates(start, end):
+    dates = pd.date_range(start, end, closed='right', freq=pd.offsets.WeekOfMonth(week=1, weekday=2))
+    return [str(date.date()) for date in dates]
 
-for day, tau_day in zip(days, taus):
-    hd_data, S0 = HdData.filter_data(date=day)
-    log_returns = get_returns(hd_data)*100
+days = create_dates(start='2019-04-01', end='2020-04-15')
+taus = [7]*len(days)
 
-    filename = simulate_GARCH_moving(log_returns, S0, tau_day, day, M)
+color = cm.rainbow(np.linspace(0, 1, len(days)))
+x_pos, y_pos = 0.99, 0.99
+fig, ax = plt.subplots(1,1)
+for day, tau_day, c in zip(days, taus, color):
+    try:
+        print(day, tau_day)
+        hd_data, S0 = HdData.filter_data(day)
+        HD = HdCalculator(hd_data, tau_day=tau_day, date=day,
+                          S0=S0, burnin=tau_day * 2, path=garch_data, M=M,
+                          overwrite=False)
+        HD.get_hd()
 
-    S_sim = pd.read_csv(save_data + filename)
-    sample = np.array(S_sim['S'])
+        ax.plot(HD.M, HD.q_M, c=c)
+        ax.text(x_pos, y_pos, str(day),
+                 horizontalalignment='right',
+                 verticalalignment='top',
+                 transform=ax.transAxes, c=c)
+        y_pos -= 0.05
+    except:
+        print('Not enough historical data. Choose later timepoint.')
+        pass
 
-    S = np.linspace(0.5*S0, 1.5*S0, num=100)
-    hd_single = density_estimation(sample, S, h=0.1*S0)
+plt.xlabel('Moneyness M')
+plt.xlim(0.5, 1.5)
+plt.ylim(0)
+plt.tight_layout()
 
-    ################## BATCH
-    model_fit, pars, bounds = GARCH_fit(log_returns[:-tau_day])
-    returns_sim = batch_GARCH_predict(model_fit, tau_day, simulations=M)
-    sample = batch_S(S0, returns_sim)
-    hd_batch = density_estimation(sample, S, h=0.1*S0)
 
-    filename = 'T-{}_{}_S-batch.pkl'.format(tau_day, day)
-    pickle.dump(sample, open(save_data + filename, "wb"))
-
-    fig = plt.figure(figsize=(5,4))
-    ax = fig.add_subplot(111)
-    ax.plot(S/S0, hd_single, c='r', label='single')
-    ax.plot(S/S0, hd_batch, c='b', label='batch')
-    ax.legend(loc=2)
-    ax.text(0.99, 0.99, str(day) + '\n' + r'$\tau$ = ' + str(tau_day),
-             horizontalalignment='right',
-             verticalalignment='top',
-             transform=ax.transAxes)
-    fig.tight_layout()
-    fig.savefig(save_plots + 'GARCH_T-{}_{}_singleVSbatch.png'.format(tau_day, day), transperent=True)
+integrate(HD.M, HD.q_M)
+integrate(HD.K, HD.q_K)
 
 
 
@@ -102,7 +81,7 @@ for file in files:
     hd_data, S0 = HdData.filter_data(date=day)
 
     filename = 'T-{}_{}_S-single.csv'.format(tau_day, day)
-    S_sim = pd.read_csv(os.path.join(save_data, filename))
+    S_sim = pd.read_csv(join(save_data, filename))
     sample_single = np.array(S_sim['S'])
 
     hd_single = density_estimation(sample_single/S0, M, h=0.1)
@@ -110,7 +89,7 @@ for file in files:
     ################## BATCH
 
     filename = 'T-{}_{}_S-batch.pkl'.format(tau_day, day)
-    with open(os.path.join(save_data, filename), 'rb') as f:
+    with open(join(save_data, filename), 'rb') as f:
         sample_batch = pickle.load(f)
     hd_batch = density_estimation(sample_batch / S0, M, h=0.1)
 
@@ -125,7 +104,7 @@ for file in files:
              transform=ax.transAxes)
     ax.set_xlabel('Moneyness')
     fig.tight_layout()
-    fig.savefig(os.path.join(save_plots, 'GARCH_T-{}_{}_singleVSbatch.png'.format(tau_day, day)), transperent=True)
+    fig.savefig(join(save_plots, 'GARCH_T-{}_{}_singleVSbatch.png'.format(tau_day, day)), transperent=True)
 
 
 from util.historical_density import integrate

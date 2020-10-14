@@ -3,8 +3,10 @@ import pandas as pd
 import os
 from os.path import join
 
-from util.density import density_estimation
+from util.density import density_estimation, density_trafo_K2M
 from util.garch import GARCH
+
+
 #
 #
 # def _get_returns(self):
@@ -71,11 +73,12 @@ class HdCalculator:
         self.filename = 'T-{}_{}_Ksim.csv'.format(self.tau_day, self.date)
         self.overwrite = overwrite
 
-        self.log_returns = None
-        self.S = None
-        self.M = None
-        self.q_M = None
-        self.q_S = None
+        self.log_returns = None   # log-returns of spot prices
+        self.S = None             # simulated S_T
+        self.K = None             # K-domain for density
+        self.M = None             # M-domain for density
+        self.q_K = None           # density in K-domain
+        self.q_M = None           # density in M-domain
 
         self._get_log_returns()
         self.GARCH = GARCH(self.log_returns, self.tau_day, burnin=self.burnin,
@@ -109,37 +112,8 @@ class HdCalculator:
         self.S = pd.read_csv(join(self.garch_data, self.filename))
         S_arr = np.array(self.S)
         self.K = np.linspace(self.S0 * 0.2, self.S0 * 1.8, 500)
-        self.q = density_estimation(S_arr, self.K,  h=self.S0 * self.h)
-        self.M = (self.K/self.S0)**(-1)
-
-
-class HdCalculator_old:
-    def __init__(self, data, tau_day, date, S0, path, h=0.1):
-        self.data = data
-        self.tau_day = tau_day
-        self.date = date
-        self.S0 = S0
-        self.garch_data = path
-        self.h = h
-        self.filename = 'T-{}_{}_S-single.csv'.format(self.tau_day, self.date)
-
-        self.S = None
-        self.M = None
-        self.q_M = None
-        self.q_S = None
-
-
-    def get_hd(self):
-        if os.path.exists(self.garch_data + self.filename):
-            pass
-        else:
-            log_returns = get_returns(self.data) * 100
-            self.filename = simulate_GARCH_moving(log_returns, self.S0, self.tau_day, self.date, filename=self.filename)
-
-        S_sim = pd.read_csv(join(self.garch_data, self.filename))
-        sample = np.array(S_sim['S'])
-        self.S = np.linspace(0.5 * self.S0, 1.5 * self.S0, num=100)
-        self.q_S = density_estimation(sample, self.S, h=self.h * self.S0)
-
-        self.M = np.linspace(0.5, 1.5, num=100)
-        self.q_M = density_estimation(sample/self.S0, self.M, h=self.h)
+        self.q_K = density_estimation(S_arr, self.K,  h=self.S0 * self.h)
+        # self.M, self.q_M = density_trafo_K2M(self.K, self.q_K, self.S0, analyze=True)
+        self.M = np.linspace(0.5, 1.5, 500)
+        M_arr = np.array(self.S0 / self.S)
+        self.q_M = density_estimation(M_arr, self.M, h=self.h)

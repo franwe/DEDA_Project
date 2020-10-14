@@ -92,18 +92,19 @@ class GARCH:
 
         window = window[1:]
         mean_adjusted = window - np.mean(window)
-        res, pars, bounds = self._GARCH_fit(mean_adjusted)
-        sigma2 = [res.params['omega']/(1-res.params['alpha[1]']-res.params['beta[1]'])]
+        # res, pars, bounds = self._GARCH_fit(mean_adjusted)
+        # phi, omega, alpha, beta = pars
+        phi, omega, alpha, beta = np.mean(self.pars, axis=0).tolist()
+        sigma2 = [omega/(1-alpha-beta)]
         for i in range(steps):
             window = window[1:]
             mean_adjusted = window - np.mean(window)
             # res, pars[i, :], bounds[i, :] = GARCH_fit(mean_adjusted)
             x_t = window[-1]
-            mu_tp1 = res.params.mu * x_t
+            mu_tp1 = phi * x_t
             e_t = mean_adjusted.tolist()[-1]
 
-            sigma2_tp1 = res.params['omega'] + res.params['alpha[1]'] * e_t**2 \
-                         + res.params['beta[1]'] * sigma2[-1]
+            sigma2_tp1 = omega + alpha * e_t**2  + beta * sigma2[-1]
             z_tp1 = np.random.choice(self.z_values, 1, p=weights)[0]
             x_tp1 = z_tp1 * np.sqrt(sigma2_tp1) + mu_tp1
 

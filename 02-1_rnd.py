@@ -1,73 +1,57 @@
 import os
-import pickle
-from localreg import *
+from matplotlib import pyplot as plt
+import numpy as np
+from os.path import isfile, join
+import matplotlib
 
-from util.data import RndDataClass
-from util.smoothing import local_polynomial, bspline
-from util.risk_neutral_density import spd_appfinance
+from util.data import RndDataClass, HdDataClass
+from util.risk_neutral_density import RndCalculator
+from util.historical_density import HdCalculator
+from util.density import integrate
+from util.data import HdDataClass, RndDataClass
 
 cwd = os.getcwd() + os.sep
-data_path = cwd + 'data' + os.sep
+source_data = os.path.join(cwd, 'data', '01-processed') + os.sep
+save_data = os.path.join(cwd, 'data', '02-3_rnd_hd') + os.sep
+save_plots = os.path.join(cwd, 'plots') + os.sep
+garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
-# ------------------------------------------------------------------------ MAIN
 
-# ------------------------------------------------------------------- LOAD DATA
+# ----------------------------------------------------------- LOAD DATA HD, RND
+x = 0.5
+HdData = HdDataClass(source_data + 'BTCUSDT.csv')
+RndData = RndDataClass(source_data + 'trades_clean.csv', cutoff=x)
+# TODO: Influence of coutoff?
+
 day = '2020-03-11'
-num = 140
-x=0.5
-r=0
-RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
+RndData.analyse(day)
+tau_day = 9
 
-# TODO: This section in RndDataClass.analyse
-a = RndData.complete.groupby(by=['tau_day', 'date']).count()
-a = a.reset_index()
-taus = a[a.date == day].tau_day
-t = list(taus)
-t.remove(0)
+overwrite=False
+reset_S = False
 
-res = dict()
-for tau_day in t:
-    print(tau_day)
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day)
-    h = df_tau.shape[0] ** (-1 / 9)
-    tau = df_tau.tau.iloc[0]
+print(day, tau_day)
+hd_data, S0 = HdData.filter_data(day)
+HD = HdCalculator(hd_data, tau_day=tau_day, date=day,
+                  S0=S0, burnin=tau_day * 2, path=garch_data, M=1000,
+                  overwrite=overwrite)
+HD.get_hd()
 
-    # -------------------------------------------------------------- SPD NORMAL
-    spd = spd_appfinance
-    smoothing_method = local_polynomial
-    smile, first, second, M, S, K = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                     gridsize=140,
-                                                     kernel='epak')
+df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
+if reset_S:
+    df_tau['S'] = S0
+    df_tau['M'] = df_tau.S / df_tau.K
+RND = RndCalculator(df_tau, tau_day, day, h_densfit=0.1)
+RND.fit_smile()
+RND.rookley()
 
-    # ---------------------------------------- B-SPLINE on SMILE, FIRST, SECOND
-    pars, spline, points = bspline(M, smile, sections=8, degree=3)
-    # derivatives
-    first_fct = spline.derivative(1)
-    second_fct = spline.derivative(2)
 
-    df_tau['q'] = df_tau.apply(lambda row: spd(row.M, row.S, row.K,
-                                               spline(row.M), first_fct(row.M),
-                                               second_fct(row.M),
-                                               r, tau), axis=1)
 
-    a = df_tau.sort_values('M')
-    M_df = a.M.values
-    q_df = a.q.values
 
-    y2 = localreg(M_df, q_df, degree=2, kernel=tricube, width=0.05)
+plt.scatter(RND.data.M, RND.data.q_M)
+plt.plot(RND.M, RND.q_M)
+plt.vlines(1, 0, 3.5)
 
-    # ----------------------------------------------------------- STORE RESULTS
-    res.update({tau_day : {'df': df_tau[['M', 'iv', 'S', 'K', 'q']],
-                'M': M,
-                'smile': smile,
-                'first': first,
-                'second': second,
-                'K': K,
-                'M_df': M_df,
-                'q': q_df,
-                'y2': y2,
-                'S': S
-                }})
-
-with open(data_path + 'results_' + day + '.pkl', 'wb') as f:
-    pickle.dump(res, f)
+from util.density import integrate
+integrate(RND.M, RND.q_M)
+integrate(RND.K, RND.q_K)

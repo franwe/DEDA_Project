@@ -69,10 +69,10 @@ def local_polynomial(X, Y, h, gridsize=50, kernel='epak'):
     return fit, first, second, X_domain, f
 
 
-def bspline(M, smile, sections, degree=3):
-    idx = np.linspace(0, len(M) - 1, sections+1, endpoint=True).round(0).astype('int')
-    x = M[idx]
-    y = smile[idx]
+def bspline(x, y, sections, degree=3):
+    idx = np.linspace(0, len(x) - 1, sections+1, endpoint=True).round(0).astype('int')
+    x = x[idx]
+    y = y[idx]
 
     t, c, k = interpolate.splrep(x, y, s=0, k=degree)
     spline = interpolate.BSpline(t, c, k, extrapolate=True)
