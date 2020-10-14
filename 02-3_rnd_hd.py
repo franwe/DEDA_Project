@@ -97,7 +97,7 @@ for file in files:
     splits = file.split('_')
     tau_day = int(splits[0][2:])
     day = splits[1]
-    fig3, fig4, fig5 = plot_2d(RndData, HdData, day, tau_day, x=x, reset_S=False)
+    fig3, fig4, fig5 = plot_MKM(RndData, HdData, day, tau_day, x=x, reset_S=False)
     figpath = os.path.join(save_plots, 'M-Direct_T-{}_{}.png'.format(tau_day, day))
     fig3.savefig(figpath, transparent=True)
     figpath = os.path.join(save_plots, 'M_T-{}_{}.png'.format(tau_day, day))
@@ -117,10 +117,10 @@ for file in files:
     splits = file.split('_')
     tau_day = int(splits[0][2:])
     day = splits[1]
-    fig3, fig4, fig5 = plot_2d(RndData, HdData, day, tau_day, x=x, y_lim=0.00075, reset_S=True)
+    fig3, fig4, fig5 = plot_MKM(RndData, HdData, day, tau_day, x=x, y_lim=0.00075, reset_S=True)
     figpath = os.path.join(save_plots, 'M-Direct_T-{}_{}.png'.format(tau_day, day))
     fig3.savefig(figpath, transparent=True)
     figpath = os.path.join(save_plots, 'M_T-{}_{}.png'.format(tau_day, day))
-    fig4.savefig(figpath, transparent=True)ˆ
+    fig4.savefig(figpath, transparent=True)
     figpath = os.path.join(save_plots, 'K_T-{}_{}.png'.format(tau_day, day))
     fig5.savefig(figpath, transparent=True)
