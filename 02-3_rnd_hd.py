@@ -1,105 +1,126 @@
 import os
 from matplotlib import pyplot as plt
-from localreg import *
+import numpy as np
+from os.path import isfile, join
+import matplotlib
 
 from util.data import RndDataClass, HdDataClass
-from util.smoothing import local_polynomial, bspline
-from util.risk_neutral_density_bu import spd_appfinance
-from util.garch import simulate_hd
+from util.risk_neutral_density import RndCalculator
+from util.historical_density import HdCalculator
+from util.density import integrate
+from util.data import HdDataClass, RndDataClass
 
 cwd = os.getcwd() + os.sep
-data_path = cwd + 'data' + os.sep
+source_data = os.path.join(cwd, 'data', '01-processed') + os.sep
+save_data = os.path.join(cwd, 'data', '02-3_rnd_hd') + os.sep
+save_plots = os.path.join(cwd, 'plots') + os.sep
+garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
 
 # --------------------------------------------------------------------- 2D PLOT
-def plot_2d(df_tau, day, tau_day, hd_data, S0, x=0.3):
-    h = df_tau.shape[0] ** (-1 / 9)
-    tau = df_tau.tau.iloc[0]
-    r = 0
+def plot_MKM(RndData, HdData, day, tau_day, x, y_lim=None, reset_S=False, overwrite=False, h_densfit=0.2):
+    filename = 'T-{}_{}_M-K.png'.format(tau_day, day)
+    if reset_S: filename = 'T-{}_{}_M-K_S0.png'.format(tau_day, day)
 
-    fig3 = plt.figure(figsize=(5,4))
-    ax3 = fig3.add_subplot(111)
-    # ------------------------------------------------------------------ SPD NORMAL
-    spd = spd_appfinance
-    smoothing_method = local_polynomial
-    smile, first, second, M, S, K = smoothing_method(df_tau, tau, h, h_t=0.1,
-                                                 gridsize=140, kernel='epak')
+    print(day, tau_day)
+    hd_data, S0 = HdData.filter_data(day)
+    tomorrow = '2020-03-13'
+    hd_data, S0 = HdData.filter_data(tomorrow)
+    print(S0)
+    HD = HdCalculator(hd_data, tau_day = tau_day, date = day,
+                      S0=S0, burnin=tau_day*2, path=garch_data, M=5000, overwrite=overwrite)
+    HD.get_hd()
 
-    # ---------------------------------------- B-SPLINE on SMILE, FIRST, SECOND
-    pars, spline, points = bspline(M, smile, sections=8, degree=3)
-    # derivatives
-    first_fct = spline.derivative(1)
-    second_fct = spline.derivative(2)
+    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
+    if reset_S:
+        df_tau['S'] = S0
+        df_tau['M'] = df_tau.S / df_tau.K
+    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
+    RND.fit_smile()
+    RND.rookley()
 
-    df_tau['q'] = df_tau.apply(lambda row: spd(row.M, row.S, row.K,
-                                               spline(row.M), first_fct(row.M),
-                                               second_fct(row.M),
-                                               r, tau), axis=1)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    # --------------------------------------------------- Moneyness - Moneyness
+    ax = axes[0]
+    ax.plot(RND.data.M, RND.data.q_M, '.', markersize=5, color='gray')
+    ax.plot(RND.M, RND.q_M, '-', c='r')
+    ax.plot(HD.M, HD.q_M, '-', c='b')
 
-    a = df_tau.sort_values('M')
-    M_df = a.M.values
-    q_df = a.q.values
-    ax3.plot(M_df, q_df, '.', markersize=5, color='gray')
-
-    y2 = localreg(M_df, q_df, degree=2, kernel=tricube, width=0.05)
-    ax3.plot(M_df, y2, '-', c='r')
-
-    # ---------------------------------------------------------------------- HD
-    S_hd = np.linspace(M_df.min()*S0, M_df.max()*S0, num=100)
-    hd, S_hd = simulate_hd(hd_data, S0, tau_day, S_domain=S_hd)
-    ax3.plot(S_hd/S0, hd, '-', c='b')
-
-    ax3.text(0.99, 0.99, str(day) + '\n' + r'$\tau$ = ' + str(tau_day),
+    ax.text(0.99, 0.99, str(day) + '\n' + r'$\tau$ = ' + str(tau_day),
             horizontalalignment='right',
             verticalalignment='top',
-            transform=ax3.transAxes)
-    # ax3.axvline(1, ls=':')
-    ax3.set_xlim(1-x, 1+x)
-    ax3.set_ylim(0, 0.002) # TODO: adjustable!
-    ax3.set_xlabel('Moneyness')
+            transform=ax.transAxes)
+    ax.set_xlim((1-x), (1+x))
+    if y_lim: ax.set_ylim(0, y_lim['M'])
+    ax.set_ylim(0)
+    ax.vlines(1, 0, RND.data.q_M.max())
+    ax.set_xlabel('Moneyness M')
+
+    # ------------------------------------------------------------------ Strike
+
+    ax = axes[1]
+    ax.plot(RND.data.K, RND.data.q, '.', markersize=5, color='gray')
+    ax.plot(RND.K, RND.q_K, '-', c='r')
+    ax.plot(HD.K, HD.q_K, '-', c='b')
+
+    ax.text(0.99, 0.99, str(day) + '\n' + r'$\tau$ = ' + str(tau_day),
+             horizontalalignment='right',
+             verticalalignment='top',
+             transform=ax.transAxes)
+    ax.set_xlim((1-x)*S0, (1+x)*S0)
+    if y_lim: ax.set_ylim(0, y_lim['K'])
+    ax.set_ylim(0)
+    ax.set_xlabel('Strike Price K')
+    ax.vlines(S0, 0, RND.data.q.max())
     plt.tight_layout()
-    return fig3
+    return fig, filename
 
-
-# -----------------------------------------------------------------------------
-day = '2020-03-11'
-tau_day = 9
-x = 0.3
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
-HdData = HdDataClass(data_path + 'BTCUSDT.csv')
-RndData = RndDataClass(data_path + 'trades_clean.csv', cutoff=x)
+x = 0.5
+HdData = HdDataClass(source_data + 'BTCUSDT.csv')
+RndData = RndDataClass(source_data + 'trades_clean.csv', cutoff=x)
 # TODO: Influence of coutoff?
 
+day = '2020-03-12'
+RndData.analyse(day)
+tau_day = 8
+fig, filename = plot_MKM(RndData, HdData, day, tau_day, x=x, reset_S=False, overwrite=False, h_densfit=0.15) #, y_lim={'M': 1.6, 'K': 0.00035})
+fig.savefig(join(save_plots, filename), transparent=True)
+
 # ----------------------------------------------------------------------- Plots
-days = ['2020-03-11', '2020-03-20', '2020-03-29', '2020-03-06']
-taus = [2,             2,            2,            21]
+files = [f for f in os.listdir(garch_data) if (isfile(join(garch_data, f)) & (f.startswith('T-')) & (f.endswith('.csv')))]
+files.sort()
 
-days = ['2020-03-07', '2020-03-11', '2020-03-18', '2020-03-23', '2020-03-30', '2020-04-04']
-taus = [2, 2,2,2,2,2]
-
-days = ['2020-03-06', '2020-03-13', '2020-03-20', '2020-04-03']
-taus = [14,             14,            14,            14]
-
-for day, tau_day in zip(days, taus):
-    print(day)
-    df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
-    hd_data, S0 = HdData.filter_data(date=day)
-    fig3 = plot_2d(df_new, day, tau_day, hd_data, S0, x=x)
-    figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
+for file in files:
+    print(file)
+    splits = file.split('_')
+    tau_day = int(splits[0][2:])
+    day = splits[1]
+    fig3, fig4, fig5 = plot_MKM(RndData, HdData, day, tau_day, x=x, reset_S=False)
+    figpath = os.path.join(save_plots, 'M-Direct_T-{}_{}.png'.format(tau_day, day))
     fig3.savefig(figpath, transparent=True)
+    figpath = os.path.join(save_plots, 'M_T-{}_{}.png'.format(tau_day, day))
+    fig4.savefig(figpath, transparent=True)
+    figpath = os.path.join(save_plots, 'K_T-{}_{}.png'.format(tau_day, day))
+    fig5.savefig(figpath, transparent=True)
 
 
+# ----------------------------------------------------------------------- Plots
 
-RndData.analyse('2020-03-26')
-RndData.analyse(sortby='date')
-day = '2020-03-20'
-tau_day = 2
+# ----------------------------------------------------------------------- Plots
+files = [f for f in os.listdir(garch_data) if (isfile(join(garch_data, f)) & (f.startswith('T-7')) & (f.endswith('.csv')))]
+files.sort()
 
-df_new = RndData.filter_data(date=day, tau_day=tau_day, mode='complete')
-hd_data, S0 = HdData.filter_data(date=day)
-fig3 = plot_2d(df_new, day, tau_day, hd_data, S0)
-figpath = os.path.join(data_path, 'plots', 'T-{}_{}.png'.format(tau_day, day))
-fig3.savefig(figpath, transparent=True)
-
-figpath = os.path.join(data_path, 'plots', 'Meme.png'.format(tau_day, day))
+for file in files:
+    print(file)
+    splits = file.split('_')
+    tau_day = int(splits[0][2:])
+    day = splits[1]
+    fig3, fig4, fig5 = plot_MKM(RndData, HdData, day, tau_day, x=x, y_lim=0.00075, reset_S=True)
+    figpath = os.path.join(save_plots, 'M-Direct_T-{}_{}.png'.format(tau_day, day))
+    fig3.savefig(figpath, transparent=True)
+    figpath = os.path.join(save_plots, 'M_T-{}_{}.png'.format(tau_day, day))
+    fig4.savefig(figpath, transparent=True)
+    figpath = os.path.join(save_plots, 'K_T-{}_{}.png'.format(tau_day, day))
+    fig5.savefig(figpath, transparent=True)

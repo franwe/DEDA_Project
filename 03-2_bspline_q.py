@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.pyplot import cm
 
 from util.smoothing import local_polynomial, bspline
-from util.risk_neutral_density_bu import spd_sfe, spd_appfinance, spd_rookley
+from util.risk_neutral_density_bu import spd_appfinance
 
 cwd = os.getcwd() + os.sep
 data_path = cwd + 'data' + os.sep

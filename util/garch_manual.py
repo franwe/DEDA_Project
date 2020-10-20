@@ -1,6 +1,5 @@
 import scipy.optimize as opt
 import numpy as np
-from arch import arch_model
 
 from util.historical_density import density_estimation
 
