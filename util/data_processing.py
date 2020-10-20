@@ -1,10 +1,19 @@
 from datetime import datetime
+import hashlib
 
 
 def inst2date(s):
     expdate_str = s.split('-')[1]
     expdate = datetime.strptime(expdate_str, '%d%b%y').date()
     return expdate
+
+
+def create_id(row, attributes=['timestamp', 'M', 'iv']):
+    row_str = ''
+    for attribute in attributes:
+        row_str += str(row[attribute]) + '_'
+    id_hash = hashlib.sha256(row_str.encode('utf-8')).hexdigest()
+    return id_hash
 
 
 def data_processing(trades):
@@ -16,19 +25,21 @@ def data_processing(trades):
 
     trades['tau_day'] = trades.apply(lambda row:
                                      (row.exp_date - row.date).days, axis=1)
-    trades['price_in_USD'] = trades.price * trades.index_price
+    # trades['price_in_USD'] = trades.price * trades.index_price
     trades['iv'] = trades.iv.apply(lambda s: float(s) / 100)
-    trades['p'] = trades.amount * trades.index_price
+    # trades['p'] = trades.amount * trades.index_price
 
     # renaming and scaling for SPD
     trades.rename(
-        columns={'strike': 'K', 'index_price': 'S', 'price_in_USD': 'P'},
+        columns={'strike': 'K', 'index_price': 'S'},  # , 'price_in_USD': 'P'},
         inplace=True)
     trades['r'] = 0
     trades['M'] = trades.S / trades.K
     trades['tau'] = trades.tau_day / 365
+    trades['date'] = trades.date.apply(lambda dt: str(dt))
 
-    trades = trades[
-        ['date', 'P', 'S', 'K', 'tau', 'tau_day', 'iv', 'M', 'r', 'option',
-         'direction']]
+    trades = trades[['date', 'S', 'K', 'tau',
+                     'tau_day', 'iv', 'M', 'r', 'timestamp']]
+
+    trades['_id'] = trades.apply(lambda row: create_id(row), axis=1)
     return trades

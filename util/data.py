@@ -1,53 +1,54 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+from util.connect_db import connect_db, get_as_df
 
 
 class RndDataClass:
-    def __init__(self, path, cutoff=0.5):
-        self.path = path
+    def __init__(self, cutoff=0.5):
+        self.coll = connect_db()['trades_clean']
         self.cutoff = cutoff
-        self.complete = None
 
-        self._load_data()
-
-
-    def _load_data(self):
-        """ Load all trades, with duplicates. It DOES make a difference in Fitting! """
+    def load_data(self, date_str):
+        """ Load all trades, with duplicates.
+            It DOES make a difference in Fitting! """
         x = self.cutoff
-        d = pd.read_csv(self.path)
-        print('Shape of raw data: ', d.shape)
-        print('exclude values outside of {} - {} Moneyness - {}/{}'.format(1-x, 1+x,
-                                    sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
+        query = {'date': date_str}
+        d = get_as_df(self.coll, query)
+        # print('Shape of raw data: ', d.shape)
+        # print('exclude values outside of {} - {} Moneyness - {}/{}'
+        #       .format(1-x, 1+x, sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
         df = d[(d.M <= 1+x) & (d.M > 1-x)]
-        print('Shape of limited Moneyness data: ', df.shape)
+        # print('Shape of limited Moneyness data: ', df.shape)
         self.complete = df
 
     def analyse(self, date=None, sortby='date'):
         if date is None:
-            counts = self.complete.date.value_counts()
-            if sortby=='date':
-                print(counts.sort_index())
-            elif sortby=='counts':
-                print(counts)
+            cursor = self.coll.aggregate([{'$group': {'_id': '$date',
+                                                      'count': {'$sum': 1}}},
+                                          {'$sort': {'_id': -1}}])
         else:
-            filtered_by_date = self.complete[(self.complete.date == date)]
-            print(filtered_by_date.tau_day.value_counts())
+            cursor = self.coll.aggregate([{'$match': {'date': date}},
+                                          {'$group': {'_id': '$tau_day',
+                                                      'count': {'$sum': 1}}},
+                                          {'$sort': {'_id': 1}}])
+        return(list(cursor))
 
     def delete_duplicates(self):
         """
-        Should I do it or not? It deletes if for same option was bought twice a day
-        I guess better not delete, because might help for fitting to have weight
-        of more trades to the "normal" values.
+        Should I do it or not? It deletes if for same option was bought twice a
+        day. I guess better not delete, because might help for fitting to have
+        weight of more trades to the "normal" values.
         """
         self.unique = self.complete.drop_duplicates()
 
     def filter_data(self, date, tau_day, mode='complete'):
-        if mode=='complete':
-            filtered_by_date = self.complete[(self.complete.date == date)]
-        elif mode=='unique':
+        self.load_data(date)
+        if mode == 'complete':
+            filtered_by_date = self.complete
+        elif mode == 'unique':
             self.delete_duplicates()
-            filtered_by_date = self.unique[(self.unique.date == date)]
+            filtered_by_date = self.unique
 
         df_tau = filtered_by_date[(filtered_by_date.tau_day == tau_day)]
         df_tau = df_tau.reset_index()
@@ -63,12 +64,11 @@ class HdDataClass:
 
         self._load_data()
 
-
     def _load_data(self):
         """ Load complete BTCUSDT prices """
         d = pd.read_csv(self.path)
-        print('Shape of raw data: ', d.shape)
-        print('from {} to {}'.format(d.Date.min(), d.Date.max()))
+        # print('Shape of raw data: ', d.shape)
+        # print('from {} to {}'.format(d.Date.min(), d.Date.max()))
         self.complete = d
 
     def filter_data(self, date):

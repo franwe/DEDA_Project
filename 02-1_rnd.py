@@ -11,18 +11,19 @@ from util.density import integrate
 from util.data import HdDataClass, RndDataClass
 
 cwd = os.getcwd() + os.sep
-source_data = os.path.join(cwd, 'data', '01-processed') + os.sep
+source_data = os.path.join(cwd, 'data', '00-raw') + os.sep
 save_data = os.path.join(cwd, 'data', '02-3_rnd_hd') + os.sep
 save_plots = os.path.join(cwd, 'plots') + os.sep
 garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
-# TESTESETEST
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
 HdData = HdDataClass(source_data + 'BTCUSDT.csv')
-RndData = RndDataClass(source_data + 'trades_clean.csv', cutoff=x)
+RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
+
+RndData.analyse()
 
 day = '2020-03-11'
 RndData.analyse(day)
@@ -52,6 +53,7 @@ RND.rookley()
 plt.scatter(RND.data.M, RND.data.q_M)
 plt.plot(RND.M, RND.q_M)
 plt.vlines(1, 0, 3.5)
+plt.show()
 
 from util.density import integrate
 integrate(RND.M, RND.q_M)

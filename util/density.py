@@ -3,6 +3,7 @@ from scipy.integrate import simps
 from sklearn.neighbors import KernelDensity
 from util.smoothing import bspline
 
+
 def density_estimation(sample, S, h, kernel='epanechnikov'):
     """
     Kernel Density Estimation for domain S, based on sample
@@ -33,7 +34,8 @@ def density_trafo_K2M(K, q_K, S, analyze=False):
     ------- :
     return  : density
     '''
-    if analyze: print('in K: ', integrate(K, q_K))
+    if analyze:
+        print('in K: ', integrate(K, q_K))
     pars, q_K, points = bspline(K, q_K, 30)
 
     num = len(K)
@@ -41,10 +43,9 @@ def density_trafo_K2M(K, q_K, S, analyze=False):
     q_M = np.zeros(num)
     for i, m in enumerate(M):
         q_M[i] = S / (m ** 2) * q_K(S / m)
-    if analyze: print('in M: ', integrate(M, q_M))
+    if analyze:
+        print('in M: ', integrate(M, q_M))
     return M, q_M
-
-
 
 
 def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals):

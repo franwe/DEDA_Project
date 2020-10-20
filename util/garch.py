@@ -27,18 +27,15 @@ class GARCH:
         self.returns_paths = None
         self.sigma2_paths = None
 
-
     def _GARCH_fit(self, data):
         model = arch_model(data, p=1, q=1)
         res = model.fit(disp='off')
 
-        pars = [res.params['mu'], res.params['omega'], res.params['alpha[1]'],
-                res.params[
-                    'beta[1]']]
-        bounds = [res.std_err['mu'], res.std_err['omega'], res.std_err['alpha[1]'],
-                  res.std_err['beta[1]']]
+        pars = [res.params['mu'], res.params['omega'],
+                res.params['alpha[1]'], res.params['beta[1]']]
+        bounds = [res.std_err['mu'], res.std_err['omega'],
+                  res.std_err['alpha[1]'], res.std_err['beta[1]']]
         return res, pars, bounds
-
 
     def create_Z(self):
         start_idx = self.data.shape[0] - self.window_length * 2
@@ -57,9 +54,9 @@ class GARCH:
             e = window - mu_t
             res, pars[i, :], bounds[i, :] = self._GARCH_fit(e)
 
-            phi, omega, alpha, beta = res.params['mu'], res.params['omega'], \
-                                      res.params['alpha[1]'], res.params[
-                                          'beta[1]']
+            _, omega, alpha, beta = res.params['mu'], res.params['omega'], \
+                res.params['alpha[1]'], res.params[
+                'beta[1]']
             x_t = window.tolist()[-1]
             e_tm1 = e.tolist()[-2]
             if i == 0:
@@ -74,11 +71,11 @@ class GARCH:
             z_process.append(z_t)
 
         self.z_values = np.linspace(np.min(z_process), np.max(z_process),
-                                     500).tolist()
+                                    500).tolist()
         h_dyn = self.h * (np.max(z_process) - np.min(z_process))
         self.z_dens = density_estimation(np.array(z_process),
-                                          np.array(self.z_values),
-                                          h=h_dyn).tolist()
+                                         np.array(self.z_values),
+                                         h=h_dyn).tolist()
         self.pars = pars
         self.bounds = bounds
         return sigma2, z_process
@@ -96,7 +93,7 @@ class GARCH:
         # phi, omega, alpha, beta = pars
         phi, omega, alpha, beta = np.mean(self.pars, axis=0).tolist()
         sigma2 = [omega/(1-alpha-beta)]
-        for i in range(steps):
+        for _ in range(steps):
             window = window[1:]
             mean_adjusted = window - np.mean(window)
             # res, pars[i, :], bounds[i, :] = GARCH_fit(mean_adjusted)
@@ -104,14 +101,13 @@ class GARCH:
             mu_tp1 = phi * x_t
             e_t = mean_adjusted.tolist()[-1]
 
-            sigma2_tp1 = omega + alpha * e_t**2  + beta * sigma2[-1]
+            sigma2_tp1 = omega + alpha * e_t**2 + beta * sigma2[-1]
             z_tp1 = np.random.choice(self.z_values, 1, p=weights)[0]
             x_tp1 = z_tp1 * np.sqrt(sigma2_tp1) + mu_tp1
 
             sigma2.append(sigma2_tp1)
             window.append(x_tp1)
         return sigma2[-self.horizon:], window[-self.horizon:]
-
 
     def simulate_paths(self, save_paths=50):
         S = []
@@ -136,14 +132,17 @@ class GARCH:
         self.sigma2_paths = sigma2_paths
         self.all_returns = all_returns
 
-
     def plot_params(self, pars, bounds, CI=False):
         fig_pars, axes = plt.subplots(4, 1, figsize=(8, 6))
 
         for i, name in zip(range(0, 4), ['mu', 'omega', 'alpha', 'beta']):
             axes[i].plot(pars[:, i], label='arch.arch_model', c='b')
-            if CI: axes[i].plot(range(0, len(pars)), (pars[:, i] + 1.96*bounds[:, i]), ls=':', c='b')
-            if CI: axes[i].plot(range(0, len(pars)), (pars[:, i] - 1.96*bounds[:, i]), ls=':', c='b')
+            if CI:
+                axes[i].plot(range(0, len(pars)),
+                             (pars[:, i] + 1.96*bounds[:, i]), ls=':', c='b')
+            if CI:
+                axes[i].plot(range(0, len(pars)),
+                             (pars[:, i] - 1.96*bounds[:, i]), ls=':', c='b')
             axes[i].set_ylabel(name)
         axes[0].legend()
         return fig_pars

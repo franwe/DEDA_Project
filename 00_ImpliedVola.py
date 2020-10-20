@@ -55,22 +55,20 @@ def calculate_iv(df_tau, start_sigma=0.5, iterations=500,
     puts = df_tau[df_tau.option == 'P']
 
     calls['BS_iv'] = calls.apply(lambda row:
-             implied_volatility(P=row.P, S=row.S, K=row.K,
-                                r=row.r, T=row.tau,
-                                option='Call',
-                                iterations=iterations,
-                                convergance_threshold=convergance_threshold,
-                                sigma=start_sigma)
-             , axis=1)
+                                 implied_volatility(P=row.P, S=row.S, K=row.K,
+                                                    r=row.r, T=row.tau,
+                                                    option='Call',
+                                                    iterations=iterations,
+                                                    convergance_threshold=convergance_threshold,
+                                                    sigma=start_sigma), axis=1)
 
     puts['BS_iv'] = puts.apply(lambda row:
-           implied_volatility(P=row.P, S=row.S, K=row.K,
-                              r=row.r, T=row.tau,
-                              option='Put',
-                              iterations=iterations,
-                              convergance_threshold=convergance_threshold,
-                              sigma=start_sigma)
-           , axis=1)
+                               implied_volatility(P=row.P, S=row.S, K=row.K,
+                                                  r=row.r, T=row.tau,
+                                                  option='Put',
+                                                  iterations=iterations,
+                                                  convergance_threshold=convergance_threshold,
+                                                  sigma=start_sigma), axis=1)
 
     full = pd.concat([calls, puts], axis=1)
     return full
@@ -105,5 +103,5 @@ ax.set_ylabel('implied Volatility [%]')
 plt.tight_layout()
 
 figpath = os.path.join(data_path, 'plots',
-                       'ImpliedVola_{}_T{}.png'.format(day,tau_day))
+                       'ImpliedVola_{}_T{}.png'.format(day, tau_day))
 fig.savefig(figpath, transparent=True)
