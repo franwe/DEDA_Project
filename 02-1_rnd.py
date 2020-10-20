@@ -16,6 +16,7 @@ save_data = os.path.join(cwd, 'data', '02-3_rnd_hd') + os.sep
 save_plots = os.path.join(cwd, 'plots') + os.sep
 garch_data = os.path.join(cwd, 'data', '02-2_hd_GARCH') + os.sep
 
+# TESTESETEST
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
