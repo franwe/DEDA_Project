@@ -1,182 +1,163 @@
-import os
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 import numpy as np
-import time
 from arch import arch_model
+import time
 
 from util.density import density_estimation
 
-cwd = os.getcwd() + os.sep
-
 
 class GARCH:
-    def __init__(self, data, horizon, burnin,
-                 window_length=365, h=0.1, M=5000):
+    def __init__(self, data, horizon, window_length=365, n=400, h=0.1, M=5000):
         self.data = data  # timeseries (here: log_returns)
         self.horizon = horizon
         self.h = h
         self.M = M
         self.window_length = window_length
-        self.burnin = burnin
+        self.n = n
+        self.burnin = horizon
+        self.no_of_paths_to_save = 50
 
-        self.z_values = None
-        self.z_dens = None
-        self.pars = None
-        self.bounds = None
-        self.all_returns = None
-        self.returns_paths = None
-        self.sigma2_paths = None
+    def _GARCH_fit(self, data, q=1, p=1):
+        model = arch_model(data, q=q, p=p)
+        res = model.fit(disp="off")
 
-    def _GARCH_fit(self, data):
-        model = arch_model(data, p=1, q=1)
-        res = model.fit(disp='off')
-
-        pars = [res.params['mu'], res.params['omega'],
-                res.params['alpha[1]'], res.params['beta[1]']]
-        bounds = [res.std_err['mu'], res.std_err['omega'],
-                  res.std_err['alpha[1]'], res.std_err['beta[1]']]
-        return res, pars, bounds
+        pars = (
+            res.params["mu"],
+            res.params["omega"],
+            res.params["alpha[1]"],
+            res.params["beta[1]"],
+        )
+        std_err = (
+            res.std_err["mu"],
+            res.std_err["omega"],
+            res.std_err["alpha[1]"],
+            res.std_err["beta[1]"],
+        )
+        return res, pars, std_err
 
     def create_Z(self):
-        start_idx = self.data.shape[0] - self.window_length * 2
-        end_idx = self.data.shape[0] - self.window_length
 
-        sigma2 = []
+        start = self.data.shape[0] - self.window_length - self.n
+        end = self.data.shape[0] - self.window_length
+
+        parameters = np.zeros((self.n - 1, 4))
+        parameter_bounds = np.zeros((self.n - 1, 4))
         z_process = []
-        pars = np.zeros([self.window_length, 4])  # preallocate
-        bounds = np.zeros([self.window_length, 4])  # preallocate
+        e_process = []
+        sigma2_process = []
+        for i in range(0, self.n - 1):
+            window = self.data[start + i : end + i]
+            data = window - np.mean(window)
 
-        for i in range(self.window_length):
-            window = self.data[start_idx + i: end_idx + i]
-            # x_tm1 = window.tolist()[-2]
-            # mu_t = phi * x_tm1
-            mu_t = window.mean()
-            e = window - mu_t
-            res, pars[i, :], bounds[i, :] = self._GARCH_fit(e)
+            res, parameters[i, :], parameter_bounds[i, :] = self._GARCH_fit(data)
 
-            _, omega, alpha, beta = res.params['mu'], res.params['omega'], \
-                res.params['alpha[1]'], res.params[
-                'beta[1]']
-            x_t = window.tolist()[-1]
-            e_tm1 = e.tolist()[-2]
+            _, omega, alpha, beta = [
+                res.params["mu"],
+                res.params["omega"],
+                res.params["alpha[1]"],
+                res.params["beta[1]"],
+            ]
             if i == 0:
+                print(omega, alpha, beta)
                 sigma2_tm1 = omega / (1 - alpha - beta)
             else:
-                sigma2_tm1 = sigma2[-1]
+                sigma2_tm1 = sigma2_process[-1]
 
+            e_t = data.tolist()[-1]  # last observed log-return, mean adjust.
+            e_tm1 = data.tolist()[-2]  # previous observed log-return
             sigma2_t = omega + alpha * e_tm1 ** 2 + beta * sigma2_tm1
-            z_t = (x_t - mu_t) / np.sqrt(sigma2_t)
+            z_t = e_t / np.sqrt(sigma2_t)
 
-            sigma2.append(sigma2_t)
+            e_process.append(e_t)
             z_process.append(z_t)
+            sigma2_process.append(sigma2_t)
 
-        self.z_values = np.linspace(np.min(z_process), np.max(z_process),
-                                    500).tolist()
+        self.parameters = parameters
+        self.parameter_bounts = parameter_bounds
+        self.e_process = e_process
+        self.z_process = z_process
+        self.sigma2_process = sigma2_process
+
+        # ------------------------------------------- kernel density estimation
+        self.z_values = np.linspace(min(self.z_process), max(self.z_process), 500)
         h_dyn = self.h * (np.max(z_process) - np.min(z_process))
-        self.z_dens = density_estimation(np.array(z_process),
-                                         np.array(self.z_values),
-                                         h=h_dyn).tolist()
-        self.pars = pars
-        self.bounds = bounds
-        return sigma2, z_process
+        self.z_dens = density_estimation(
+            np.array(z_process), np.array(self.z_values), h=h_dyn
+        ).tolist()
+        return ()
 
-    def _simulate_GARCH(self):
-        steps = self.burnin + self.horizon
-        start_idx = self.data.shape[0] - self.window_length
-        window = self.data[start_idx:].tolist()
+    def _GARCH_simulate(self, pars):
+        """stepwise GARCH simulation until burnin + horizon
 
-        weights = self.z_dens/(np.sum(self.z_dens))
+        Args:
+            pars (tuple): (mu, omega, alpha, beta)
 
-        window = window[1:]
-        mean_adjusted = window - np.mean(window)
-        # res, pars, bounds = self._GARCH_fit(mean_adjusted)
-        # phi, omega, alpha, beta = pars
-        phi, omega, alpha, beta = np.mean(self.pars, axis=0).tolist()
-        sigma2 = [omega/(1-alpha-beta)]
-        for _ in range(steps):
-            window = window[1:]
-            mean_adjusted = window - np.mean(window)
-            # res, pars[i, :], bounds[i, :] = GARCH_fit(mean_adjusted)
-            x_t = window[-1]
-            mu_tp1 = phi * x_t
-            e_t = mean_adjusted.tolist()[-1]
+        Returns:
+            [type]: [description]
+        """
+        mu, omega, alpha, beta = pars
 
-            sigma2_tp1 = omega + alpha * e_t**2 + beta * sigma2[-1]
+        sigma2 = [omega / (1 - alpha - beta)]
+        e = [self.data.tolist()[-1] - mu]  # last observed log-return mean adj.
+        weights = self.z_dens / (np.sum(self.z_dens))
+
+        for _ in range(self.horizon + self.burnin):
+            sigma2_tp1 = omega + alpha * e[-1] ** 2 + beta * sigma2[-1]
             z_tp1 = np.random.choice(self.z_values, 1, p=weights)[0]
-            x_tp1 = z_tp1 * np.sqrt(sigma2_tp1) + mu_tp1
-
+            e_tp1 = z_tp1 * np.sqrt(sigma2_tp1)
             sigma2.append(sigma2_tp1)
-            window.append(x_tp1)
-        return sigma2[-self.horizon:], window[-self.horizon:]
+            e.append(e_tp1)
+        return sigma2[-self.horizon :], e[-self.horizon :]
 
-    def simulate_paths(self, save_paths=50):
-        S = []
+    def simulate_paths(self):
+        pars = np.mean(self.parameters, axis=0).tolist()
+        # TODO: option to variate pars, to check for robustness
+        print(pars)
+
+        save_sigma = np.zeros((self.no_of_paths_to_save, self.horizon))
+        save_e = np.zeros((self.no_of_paths_to_save, self.horizon))
+        all_summed_returns = np.zeros(self.M)
+        all_tau_mu = np.zeros(self.M)
         tick = time.time()
-        returns_paths = np.zeros((save_paths, self.horizon))
-        sigma2_paths = np.zeros((save_paths, self.horizon))
-        all_returns = np.zeros((self.M, self.horizon))
         for i in range(self.M):
-            if (i+1) % (self.M * 0.1) == 0:
-                print('{}/{} - runtime: {} min'.format(i+1, self.M, round(
-                    (time.time() - tick) / 60)))
-            sigma2, returns = self._simulate_GARCH()
-            # ST = self._S_path(returns)
-            all_returns[i, :] = returns
+            if (i + 1) % (self.M * 0.1) == 0:
+                print(
+                    "{}/{} - runtime: {} min".format(
+                        i + 1, self.M, round((time.time() - tick) / 60)
+                    )
+                )
+            sigma2, e = self._GARCH_simulate(pars)
+            all_summed_returns[i] = np.sum(e)
+            all_tau_mu[i] = self.horizon * pars[0]
+            if i < self.no_of_paths_to_save:
+                save_sigma[i, :] = sigma2
+                save_e[i, :] = e
 
-            if i < save_paths:
-                returns_paths[i, :] = returns
-                sigma2_paths[i, :] = sigma2
-
-        self.S = S
-        self.returns_paths = returns_paths
-        self.sigma2_paths = sigma2_paths
-        self.all_returns = all_returns
+        self.save_sigma = save_sigma
+        self.save_e = save_e
+        self.all_summed_returns = all_summed_returns
+        self.all_tau_mu = all_tau_mu
+        return all_summed_returns, all_tau_mu
 
     def plot_params(self, pars, bounds, CI=False):
         fig_pars, axes = plt.subplots(4, 1, figsize=(8, 6))
 
-        for i, name in zip(range(0, 4), ['mu', 'omega', 'alpha', 'beta']):
-            axes[i].plot(pars[:, i], label='arch.arch_model', c='b')
+        for i, name in zip(range(0, 4), ["mu", "omega", "alpha", "beta"]):
+            axes[i].plot(pars[:, i], label="arch.arch_model", c="b")
             if CI:
-                axes[i].plot(range(0, len(pars)),
-                             (pars[:, i] + 1.96*bounds[:, i]), ls=':', c='b')
+                axes[i].plot(
+                    range(0, len(pars)),
+                    (pars[:, i] + 1.96 * bounds[:, i]),
+                    ls=":",
+                    c="b",
+                )
             if CI:
-                axes[i].plot(range(0, len(pars)),
-                             (pars[:, i] - 1.96*bounds[:, i]), ls=':', c='b')
+                axes[i].plot(
+                    range(0, len(pars)),
+                    (pars[:, i] - 1.96 * bounds[:, i]),
+                    ls=":",
+                    c="b",
+                )
             axes[i].set_ylabel(name)
         axes[0].legend()
         return fig_pars
-
-#
-# from util.data import HdDataClass
-#
-# HdData = HdDataClass(os.path.join(cwd, 'data', '00-raw', 'BTCUSDT.csv'))
-# day = '2020-03-06'
-# tau_day = 15
-# hd_data, S0 = HdData.filter_data(date=day)
-#
-# def get_log_returns(data, target='Adj.Close'):
-#     n = data.shape[0]
-#     data = data.reset_index()
-#     first = data.loc[:n - 2, target].reset_index()
-#     second = data.loc[1:, target].reset_index()
-#     historical_returns = (second / first)[target]
-#     return np.log(historical_returns) * 100
-#
-# def S_path(S0, returns):
-#     returns = returns/100
-#     return S0 * np.exp(sum(returns.T))
-#
-# log_returns = get_log_returns(hd_data)
-#
-# garch = GARCH(log_returns, tau_day, burnin=20, M=1000, h=0.2)
-# sigma2, z_process, pars, bounds = garch.create_Z()
-#
-# garch.simulate_paths()
-# S = S_path(S0, garch.all_returns)
-#
-# S_domain = np.linspace(S0*0.2, S0*1.8, 200)
-# q = density_estimation(S, S_domain, h=S0*0.2)
-# M = (S_domain/S0)**(-1)
-# plt.plot(M, q)
-# plt.xlim(0.5,1.5)
