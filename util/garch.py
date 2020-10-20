@@ -181,6 +181,3 @@ class GARCH:
 # M = (S_domain/S0)**(-1)
 # plt.plot(M, q)
 # plt.xlim(0.5,1.5)
-
-
-
