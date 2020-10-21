@@ -1,6 +1,8 @@
 import os
 from matplotlib import pyplot as plt
 from os.path import join
+import pandas as pd
+import numpy as np
 
 from util.data import RndDataClass, HdDataClass
 from util.risk_neutral_density import RndCalculator
@@ -30,8 +32,17 @@ def plot_MKM(
     if reset_S:
         filename = "T-{}_{}_M-K_S0.png".format(tau_day, day)
 
+    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
     hd_data, S0 = HdData.filter_data(day)
     print(S0, day, tau_day)
+    if reset_S:
+        df_tau["S"] = S0
+        df_tau["M"] = df_tau.S / df_tau.K
+
+    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
+    RND.fit_smile()
+    RND.rookley()
+
     HD = HdCalculator(
         data=hd_data,
         S0=S0,
@@ -43,14 +54,6 @@ def plot_MKM(
         overwrite=overwrite,
     )
     HD.get_hd()
-
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
-    if reset_S:
-        df_tau["S"] = S0
-        df_tau["M"] = df_tau.S / df_tau.K
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
-    RND.fit_smile()
-    RND.rookley()
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     # --------------------------------------------------- Moneyness - Moneyness
@@ -105,7 +108,14 @@ HdData = HdDataClass(source_data + "BTCUSDT.csv")
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 
-days = ["2020-03-06", "2020-03-12"]
+
+def create_dates(start, end):
+    dates = pd.date_range(start, end, closed="right", freq="D")
+    return [str(date.date()) for date in dates]
+
+
+days = create_dates(start="2020-02-05", end="2020-04-15")
+
 for day in days:
     print(day)
     taus = RndData.analyse(day)
@@ -120,10 +130,14 @@ for day in days:
                     tau_day,
                     x=x,
                     reset_S=False,
-                    overwrite=True,
+                    overwrite=False,
                     h_densfit=0.15,
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:
                 print(e)
+                pass
+            except np.linalg.LinAlgError as e:
+                print(e)
+                print("cant inverse matrix, smoothing_rookley")
                 pass

@@ -66,6 +66,9 @@ for day, tau_day, c in zip(days, taus, color):
     except ValueError as e:
         print(e)
         print("cut too much data")
+    except LinAlgError as e:
+        print(e)
+        print("")
 
 
 plt.show()

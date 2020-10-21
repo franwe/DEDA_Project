@@ -4,7 +4,7 @@ from sklearn.neighbors import KernelDensity
 from util.smoothing import bspline
 
 
-def density_estimation(sample, S, h, kernel='epanechnikov'):
+def density_estimation(sample, S, h, kernel="epanechnikov"):
     """
     Kernel Density Estimation for domain S, based on sample
     ------- :
@@ -26,16 +26,16 @@ def integrate(x, y):
 
 
 def density_trafo_K2M(K, q_K, S, analyze=False):
-    '''
+    """
     ------- :
     K       : K-domain of density
     q_K     : density in K-domain
     S       : spot price since M = S/K  # TODO: think about how it is in RND
     ------- :
     return  : density
-    '''
+    """
     if analyze:
-        print('in K: ', integrate(K, q_K))
+        print("in K: ", integrate(K, q_K))
     pars, q_K, points = bspline(K, q_K, 30)
 
     num = len(K)
@@ -44,19 +44,19 @@ def density_trafo_K2M(K, q_K, S, analyze=False):
     for i, m in enumerate(M):
         q_M[i] = S / (m ** 2) * q_K(S / m)
     if analyze:
-        print('in M: ', integrate(M, q_M))
+        print("in M: ", integrate(M, q_M))
     return M, q_M
 
 
 def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals):
-    '''
+    """
     ------- :
     K       : K-domain of density
     q_K     : density in K-domain
     S       : spot price since M = S/K  # TODO: think about how it is in RND
     ------- :
     return  : density
-    '''
+    """
     pars, q_K, points = bspline(K, q_K, 15)
 
     points = len(M_vals)

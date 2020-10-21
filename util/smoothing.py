@@ -6,14 +6,14 @@ import scipy.interpolate as interpolate
 
 # ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
 def gaussian_kernel(x, Xi, h):
-    u = (x-Xi)/h
+    u = (x - Xi) / h
     return norm.pdf(u)
 
 
 def epanechnikov(x, Xi, h):
-    u = (x - Xi)/h
-    indicator = np.where(abs(u)<= 1, 1, 0)
-    k = 0.75 * (1-u**2)
+    u = (x - Xi) / h
+    indicator = np.where(abs(u) <= 1, 1, 0)
+    k = 0.75 * (1 - u ** 2)
     return k * indicator
 
 
@@ -22,12 +22,12 @@ def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
 
     X1 = np.ones(n)
     X2 = X - x
-    X3 = (X - x)**2
+    X3 = (X - x) ** 2
     X_matrix = np.array([X1, X2, X3]).T
 
-    K_hn = 1/h * kernel(X, x, h)
-    f_hn = 1/n * sum(K_hn)
-    W_hn = K_hn/f_hn
+    K_hn = 1 / h * kernel(X, x, h)
+    f_hn = 1 / n * sum(K_hn)
+    W_hn = K_hn / f_hn
 
     W = np.diag(W_hn)
 
@@ -35,19 +35,17 @@ def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
 
     beta = np.linalg.pinv(np.dot(XTW, X_matrix)).dot(XTW).dot(Y)
 
-    return beta[0], beta[1], 2*beta[2], f_hn
+    return beta[0], beta[1], 2 * beta[2], f_hn
 
 
+def local_polynomial(X, Y, h, gridsize=50, kernel="epak"):
 
-
-def local_polynomial(X, Y, h, gridsize=50, kernel='epak'):
-
-    if kernel=='epak':
+    if kernel == "epak":
         kernel = epanechnikov
-    elif kernel=='gauss':
+    elif kernel == "gauss":
         kernel = gaussian_kernel
     else:
-        print('kernel not know, use epanechnikov')
+        print("kernel not know, use epanechnikov")
         kernel = epanechnikov
 
     X_domain = np.linspace(min(X), max(X), gridsize)
@@ -70,15 +68,16 @@ def local_polynomial(X, Y, h, gridsize=50, kernel='epak'):
 
 
 def bspline(x, y, sections, degree=3):
-    idx = np.linspace(0, len(x) - 1, sections+1, endpoint=True).round(0).astype('int')
+    idx = np.linspace(0, len(x) - 1, sections + 1, endpoint=True).round(0).astype("int")
     x = x[idx]
     y = y[idx]
 
     t, c, k = interpolate.splrep(x, y, s=0, k=degree)
     spline = interpolate.BSpline(t, c, k, extrapolate=True)
-    pars = {'t': t, 'c': c, 'deg': k}
-    points = {'x': x, 'y': y}
+    pars = {"t": t, "c": c, "deg": k}
+    points = {"x": x, "y": y}
     return pars, spline, points
+
 
 #
 # # ------------------------------------------------------------------------ MAIN

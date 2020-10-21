@@ -3,8 +3,8 @@ from pymongo import InsertOne
 import pandas as pd
 import json
 
-MONGO_DB = 'cryptocurrency'
-MONGO_COLLECTION = 'deribit_transactions'
+MONGO_DB = "cryptocurrency"
+MONGO_COLLECTION = "deribit_transactions"
 
 
 def connect_db(port=27017, db=MONGO_DB):
@@ -40,4 +40,4 @@ def bulk_write(coll, df, ordered=False):
     try:
         coll.bulk_write(operations, ordered=ordered)
     except pymongo.errors.BulkWriteError as bwe:
-        print(coll.name, len(bwe.details['writeErrors']))
+        print(coll.name, len(bwe.details["writeErrors"]))
