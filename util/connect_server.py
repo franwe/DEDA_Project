@@ -13,7 +13,7 @@ server = SSHTunnelForwarder(
     MONGO_HOST,
     ssh_username="franziska_wehrmann",
     ssh_pkey="/Users/franziska/.ssh/IRTG",
-    ssh_private_key_password="imdJSFZ#12",  # works, but if slow inter.timeout!
+    ssh_private_key_password="...",  # works, but if slow inter.timeout!
     remote_bind_address=("127.0.0.1", 27017),
 )
 
