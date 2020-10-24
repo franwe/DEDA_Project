@@ -29,14 +29,13 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2019-03-11", end="2020-04-15")
-taus = [2] * len(days)
+days = create_dates(start="2019-03-11", end="2020-04-20")
+taus = [14] * len(days)
 
 color = cm.rainbow(np.linspace(0, 1, len(days)))
 x_pos, y_pos = 0.99, 0.99
 fig, ax = plt.subplots(1, 1)
 for day, tau_day, c in zip(days, taus, color):
-    print(day, tau_day)
     hd_data, S0 = HdData.filter_data(day)
 
     HD = HdCalculator(
@@ -51,7 +50,7 @@ for day, tau_day, c in zip(days, taus, color):
     )
 
     try:
-        HD.get_hd()
+        HD.get_hd(variate=True)
         ax.plot(HD.M, HD.q_M, c=c)
         ax.text(
             x_pos,
@@ -64,12 +63,11 @@ for day, tau_day, c in zip(days, taus, color):
         )
         y_pos -= 0.05
     except ValueError as e:
-        print(e)
-        print("cut too much data")
-    except LinAlgError as e:
-        print(e)
-        print("")
+        print("ValueError :  ", e)
+    except np.linalg.LinAlgError as e:
+        print("np.linalg.LinAlgError :  ", e)
 
-
+filename = join(save_plots, "HD-{}.png".format(tau_day))
+fig.savefig(filename, transparent=True)
+print("save figure to: ", filename)
 plt.show()
-fig.savefig(join(save_plots, "HD-{}.png".format(tau_day)), transparent=True)

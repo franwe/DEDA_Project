@@ -30,14 +30,14 @@ class HdCalculator(GARCH):
         self.path = path
         self.overwrite = overwrite
         self.log_returns = self._get_log_returns()
+        self.M = M
         GARCH.__init__(
             self,
             data=self.log_returns,
-            horizon=tau_day,
             window_length=window_length,
+            data_name=self.date,
             n=n,
             h=h,
-            M=M,
         )
         self.filename = "T-{}_{}_Ksim.csv".format(self.tau_day, self.date)
 
@@ -53,16 +53,17 @@ class HdCalculator(GARCH):
         S_T = self.S0 * np.exp(all_summed_returns / 100 + all_tau_mu / 100)
         return S_T
 
-    def get_hd(self):
+    def get_hd(self, variate):
         print(self.filename)
         # simulate M paths
         if os.path.exists(self.path + self.filename) and (self.overwrite == False):
-            print("use existing file")
+            print("-------------- use existing Simulations")
             pass
         else:
-            print("create new file")
-            self.create_Z()
-            all_summed_returns, all_tau_mu = self.simulate_paths()
+            print("-------------- create new Simulations")
+            all_summed_returns, all_tau_mu = self.simulate_paths(
+                self.tau_day, self.M, variate
+            )
             self.ST = self._calculate_path(all_summed_returns, all_tau_mu)
             pd.Series(self.ST).to_csv(join(self.path, self.filename), index=False)
 

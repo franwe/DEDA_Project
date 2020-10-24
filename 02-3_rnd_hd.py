@@ -53,7 +53,7 @@ def plot_MKM(
         M=5000,
         overwrite=overwrite,
     )
-    HD.get_hd()
+    HD.get_hd(variate=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     # --------------------------------------------------- Moneyness - Moneyness
@@ -114,14 +114,14 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2020-02-05", end="2020-04-15")
+days = create_dates(start="2020-03-06", end="2020-04-20")
 
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        if (tau_day > 1) & (tau_day < 50):
+        if tau_day > 1:  # & (tau_day >= 50):
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -135,9 +135,7 @@ for day in days:
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:
-                print(e)
-                pass
+                print("ValueError  : ", e, day, tau_day)
             except np.linalg.LinAlgError as e:
-                print(e)
-                print("cant inverse matrix, smoothing_rookley")
-                pass
+                print("np.linalg.LinAlgError :  ", e)
+                print("cant invert matrix, smoothing_rookley")
