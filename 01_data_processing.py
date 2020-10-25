@@ -20,7 +20,7 @@ collection = db["deribit_transactions"]
 # ])
 # print(list(cursor))
 
-dates = pd.date_range("2020-03-04", "2020-04-22")
+dates = pd.date_range("2020-03-04", "2020-09-30")
 for start in dates:
     print(start)
     end = start + timedelta(days=1)  # datetime(2020,3,5)
@@ -39,7 +39,7 @@ for start in dates:
         df_all["date"] = df_all.datetime.apply(lambda d: datetime.date(d))
         df_all["time"] = df_all.datetime.apply(lambda d: datetime.time(d))
 
-        # ---------------------------------------------------------------- MERGE TRADES
+        # -------------------------------------------------------- MERGE TRADES
         coll = db["trades_clean"]
         columns = [
             "timestamp",
@@ -49,13 +49,14 @@ for start in dates:
             "direction",
             "date",
             "time",
+            "price",
         ]
         trades = df_all.groupby(by=columns).count().reset_index()[columns]
         trades = data_processing(trades)
         bulk_write(coll=coll, df=trades, ordered=False)
         # write_in_db(coll=coll, df=trades)
 
-        # --------------------------------------------------------------------- MERGE S
+        # ------------------------------------------------------------- MERGE S
         coll = db["BTCUSD"]
         columns = ["index_price", "datetime", "date", "time"]
         S = df_all.groupby(by=columns).count().reset_index()[columns]
@@ -65,5 +66,6 @@ for start in dates:
         bulk_write(coll=coll, df=S, ordered=False)
         # write_in_db(coll=coll, df=S)
 
-    except:
+    except AttributeError as e:
+        print(e)
         print("----- Date does not exist: ----- ", start.date())
