@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from os.path import join
 import pandas as pd
 import numpy as np
+from datetime import datetime, timedelta
 
 from util.data import RndDataClass, HdDataClass
 from util.risk_neutral_density import RndCalculator
@@ -56,7 +57,7 @@ def get_densities(
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
-HdData = HdDataClass(source_data + "BTCUSDT.csv")
+HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 
@@ -100,6 +101,7 @@ ax.text(
     transform=ax.transAxes,
 )
 ax.set_xlim((1 - x), (1 + x))
+plt.show()
 
 
 def create_intervals(sequence):
@@ -147,8 +149,35 @@ buy = rnd < hd
 intervals = create_intervals(buy)
 RND = add_action(RND, intervals)
 
-RND.data[["M", "K", "S", "action", "option"]]
-
+cols = ["M", "K", "S", "P", "P_BTC", "action", "option"]
+RND.data[cols]
 mask = (RND.data.option == "C") & (RND.data.action == "buy")
-RND.data[mask][[]]
+a = RND.data[mask][cols]
+a.groupby(by="K").count()
+
+eval_day = datetime.strptime(day, "%Y-%m-%d") + timedelta(days=tau_day)
+str(eval_day.date())
+
+from util.connect_db import connect_db, get_as_df
+
+db = connect_db()
+
+coll = db["BTCUSD_deribit"]
+query = {"date_str": str(eval_day.date())}
+ST = get_as_df(coll, query)["price"].iloc[0]
+
+
+def get_payoff(K, ST, option):
+    if option == "C":
+        return max(ST - K, 0)
+    elif option == "P":
+        return max(K - ST, 0)
+
+
+RND.data["opt_payoff"] = RND.data.apply(
+    lambda row: get_payoff(row.K, ST, row.option), axis=1
+)
+
+RND.data[cols + ["opt_payoff"]]
+
 a = 1

@@ -16,7 +16,7 @@ class HdCalculator(GARCH):
         tau_day,
         date,
         overwrite=True,
-        target="Adj.Close",
+        target="price",
         window_length=365,
         n=400,
         h=0.1,

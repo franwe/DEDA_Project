@@ -104,7 +104,7 @@ def plot_MKM(
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
-HdData = HdDataClass(source_data + "BTCUSDT.csv")
+HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 

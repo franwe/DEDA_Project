@@ -18,7 +18,7 @@ garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 
 # ---------------------------------------------------- moving window prediction
 RndData = RndDataClass(cutoff=0.4)
-HdData = HdDataClass(source_data + "BTCUSDT.csv")
+HdData = HdDataClass()
 M = 5000  # 5000
 
 

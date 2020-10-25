@@ -123,7 +123,7 @@ import pandas as pd
 from util.data import HdDataClass
 
 HdData = HdDataClass(data_path + "BTCUSDT.csv")
-target = "Adj.Close"
+target = "price"
 days = [
     "2020-03-06",
     "2020-03-11",
