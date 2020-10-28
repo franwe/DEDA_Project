@@ -19,7 +19,7 @@ class HdCalculator(GARCH):
         target="price",
         window_length=365,
         n=400,
-        h=0.1,
+        h=0.15,
         M=5000,
     ):
         self.data = data
@@ -31,15 +31,14 @@ class HdCalculator(GARCH):
         self.overwrite = overwrite
         self.log_returns = self._get_log_returns()
         self.M = M
-        GARCH.__init__(
-            self,
+        self.h = h
+        self.GARCH = GARCH(
             data=self.log_returns,
             window_length=window_length,
             data_name=self.date,
             n=n,
-            h=h,
+            z_h=0.1,
         )
-        self.filename = "T-{}_{}_Ksim.csv".format(self.tau_day, self.date)
 
     def _get_log_returns(self):
         n = self.data.shape[0]
@@ -54,6 +53,7 @@ class HdCalculator(GARCH):
         return S_T
 
     def get_hd(self, variate):
+        self.filename = "T-{}_{}_Ksim.csv".format(self.tau_day, self.date)
         print(self.filename)
         # simulate M paths
         if os.path.exists(self.path + self.filename) and (self.overwrite == False):
@@ -61,7 +61,7 @@ class HdCalculator(GARCH):
             pass
         else:
             print("-------------- create new Simulations")
-            all_summed_returns, all_tau_mu = self.simulate_paths(
+            all_summed_returns, all_tau_mu = self.GARCH.simulate_paths(
                 self.tau_day, self.M, variate
             )
             self.ST = self._calculate_path(all_summed_returns, all_tau_mu)

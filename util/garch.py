@@ -21,10 +21,10 @@ class GARCH:
         overwrite_garchmodel=False,
         window_length=365,
         n=400,
-        h=0.1,
+        z_h=0.1,
     ):
         self.data = data  # timeseries (here: log_returns)
-        self.h = h
+        self.z_h = z_h
         self.data_name = data_name
         self.window_length = window_length
         self.n = n
@@ -75,17 +75,16 @@ class GARCH:
         ):
             print(" -------------- use existing GARCH model")
             return
+        start = self.window_length + self.n
+        end = self.n
 
-        start = self.data.shape[0] - self.window_length - self.n
-        end = self.data.shape[0] - self.window_length
-
-        parameters = np.zeros((self.n - 1, 4))
-        parameter_bounds = np.zeros((self.n - 1, 4))
+        parameters = np.zeros((self.n, 4))
+        parameter_bounds = np.zeros((self.n, 4))
         z_process = []
         e_process = []
         sigma2_process = []
-        for i in range(0, self.n - 1):
-            window = self.data[start + i : end + i]
+        for i in range(0, self.n):
+            window = self.data[end - i : start - i]
             data = window - np.mean(window)
 
             res, parameters[i, :], parameter_bounds[i, :] = self._GARCH_fit(data)
@@ -97,7 +96,6 @@ class GARCH:
                 res.params["beta[1]"],
             ]
             if i == 0:
-                print(omega, alpha, beta)
                 sigma2_tm1 = omega / (1 - alpha - beta)
             else:
                 sigma2_tm1 = sigma2_process[-1]
@@ -119,7 +117,7 @@ class GARCH:
 
         # ------------------------------------------- kernel density estimation
         self.z_values = np.linspace(min(self.z_process), max(self.z_process), 500)
-        h_dyn = self.h * (np.max(z_process) - np.min(z_process))
+        h_dyn = self.z_h * (np.max(z_process) - np.min(z_process))
         self.z_dens = density_estimation(
             np.array(z_process), np.array(self.z_values), h=h_dyn
         ).tolist()
@@ -177,6 +175,7 @@ class GARCH:
         self.load()
         pars = np.mean(self.parameters, axis=0).tolist()  # mean
         bounds = np.std(self.parameters, axis=0).tolist()  # std of mean par
+        print("garch parameters :  ", pars)
         np.random.seed(1)  # for reproducability in _variate_pars()
 
         new_pars = copy.deepcopy(pars)  # set pars for first round of simulation

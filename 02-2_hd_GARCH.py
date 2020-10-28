@@ -29,14 +29,15 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2019-03-11", end="2020-04-20")
-taus = [14] * len(days)
+days = create_dates(start="2019-09-01", end="2020-10-01")
+taus = [7] * len(days)
 
 color = cm.rainbow(np.linspace(0, 1, len(days)))
 x_pos, y_pos = 0.99, 0.99
 fig, ax = plt.subplots(1, 1)
 for day, tau_day, c in zip(days, taus, color):
     hd_data, S0 = HdData.filter_data(day)
+    hd_data = hd_data.reset_index()
 
     HD = HdCalculator(
         data=hd_data,
@@ -46,7 +47,7 @@ for day, tau_day, c in zip(days, taus, color):
         date=day,
         n=400,
         M=5000,
-        overwrite=True,
+        overwrite=False,
     )
 
     try:
@@ -62,6 +63,7 @@ for day, tau_day, c in zip(days, taus, color):
             c=c,
         )
         y_pos -= 0.05
+        del HD
     except ValueError as e:
         print("ValueError :  ", e)
     except np.linalg.LinAlgError as e:
