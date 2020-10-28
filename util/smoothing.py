@@ -38,7 +38,7 @@ def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
     return beta[0], beta[1], 2 * beta[2], f_hn
 
 
-def local_polynomial(X, Y, h, gridsize=50, kernel="epak"):
+def local_polynomial(X, Y, h, gridsize=100, kernel="epak"):
 
     if kernel == "epak":
         kernel = epanechnikov

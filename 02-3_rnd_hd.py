@@ -104,7 +104,7 @@ def plot_MKM(
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
-HdData = HdDataClass(source_data + "BTCUSDT.csv")
+HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 
@@ -114,14 +114,14 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2020-03-06", end="2020-04-20")
+days = create_dates(start="2020-05-01", end="2020-05-30")
 
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        if tau_day > 1:  # & (tau_day >= 50):
+        if (tau_day > 40) & (tau_day <= 99):
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -131,7 +131,7 @@ for day in days:
                     x=x,
                     reset_S=False,
                     overwrite=False,
-                    h_densfit=0.15,
+                    h_densfit=0.25,
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:
@@ -139,3 +139,6 @@ for day in days:
             except np.linalg.LinAlgError as e:
                 print("np.linalg.LinAlgError :  ", e)
                 print("cant invert matrix, smoothing_rookley")
+            except ZeroDivisionError as e:
+                print("ZeroDivisionError  : ", e)
+                print("Empty data.")

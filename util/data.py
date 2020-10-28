@@ -63,24 +63,21 @@ class RndDataClass:
 
 
 class HdDataClass:
-    def __init__(self, path, target="Adj.Close"):
-        self.path = path
+    def __init__(self, target="price"):
         self.target = target
+        self.coll = connect_db()["BTCUSD_binance"]
         self.complete = None
-
         self._load_data()
 
     def _load_data(self):
         """ Load complete BTCUSDT prices """
-        d = pd.read_csv(self.path)
-        # print('Shape of raw data: ', d.shape)
-        # print('from {} to {}'.format(d.Date.min(), d.Date.max()))
-        self.complete = d
+        prices_binance = get_as_df(self.coll, {})
+        self.complete = prices_binance
 
     def filter_data(self, date):
-        yesterday = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
-        yesterday_str = str(yesterday.date())
+        # yesterday = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
+        # yesterday_str = str(yesterday.date())
 
-        S0 = self.complete.loc[self.complete.Date == yesterday_str, self.target].iloc[0]
-        df_yesterday = self.complete[self.complete.Date <= yesterday_str]
-        return df_yesterday, S0
+        S0 = self.complete.loc[self.complete.date_str == date, self.target].iloc[0]
+        df = self.complete[self.complete.date_str <= date]
+        return df, S0
