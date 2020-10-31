@@ -114,14 +114,15 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2020-05-01", end="2020-05-30")
+days = create_dates(start="2020-03-01", end="2020-04-30")
 
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        if (tau_day > 40) & (tau_day <= 99):
+        # if (tau_day > 7) & (tau_day <= 40):    # h_densfit  = 0.15
+        if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -129,7 +130,7 @@ for day in days:
                     day,
                     tau_day,
                     x=x,
-                    reset_S=False,
+                    reset_S=True,
                     overwrite=False,
                     h_densfit=0.25,
                 )
