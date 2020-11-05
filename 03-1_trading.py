@@ -1,15 +1,23 @@
 import os
 from matplotlib import pyplot as plt
 from os.path import join
-import numpy as np
-from datetime import datetime, timedelta
-from pprint import pprint
+import pandas as pd
+import logging
+
+logging.basicConfig(filename="trading.log", level=logging.DEBUG)
 
 from util.data import RndDataClass, HdDataClass
-from util.risk_neutral_density import RndCalculator
-from util.historical_density import HdCalculator
-from util.smoothing import bspline
-from util.connect_db import connect_db, get_as_df
+from util.trading import (
+    get_densities,
+    plot_hd_rnd,
+    create_intervals,
+    add_action,
+    execute_options,
+    general_trading_payoffs,
+    skewness_trade,
+    kurtosis_trade,
+    trade_results,
+)
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
@@ -17,189 +25,185 @@ save_data = join(cwd, "data", "03-1_trades") + os.sep
 save_plots = join(cwd, "plots") + os.sep
 garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 
-# --------------------------------------------------------------------- 2D PLOT
-
-
-def get_densities(
-    RndData,
-    HdData,
-    day,
-    tau_day,
-    x,
-    y_lim=None,
-    reset_S=False,
-    overwrite=False,
-    h_densfit=0.15,
-    cutoff=0.5,
-):
-
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
-    hd_data, S0 = HdData.filter_data(day)
-    print(S0, day, tau_day)
-    if reset_S:
-        df_tau["S"] = S0
-        df_tau["M"] = df_tau.S / df_tau.K
-
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
-    RND.fit_smile()
-    RND.rookley()
-
-    HD = HdCalculator(
-        data=hd_data,
-        S0=S0,
-        path=garch_data,
-        tau_day=tau_day,
-        date=day,
-        cutoff=cutoff,
-        n=400,
-        M=5000,
-        overwrite=overwrite,
-    )
-    HD.get_hd(variate=True)
-    return HD, RND
-
-
-def plot_hd_rnd(HD, RND):
-    _, HD_spline, _ = bspline(HD.M, HD.q_M, sections=15, degree=2)
-    _, RND_spline, _ = bspline(RND.M, RND.q_M, sections=15, degree=2)
-    M = np.linspace(min(min(RND.M), min(HD.M)), max(max(RND.M), max(HD.M)), 100)
-
-    hd = HD_spline(M)
-    rnd = RND_spline(M)
-
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-    # --------------------------------------------------- Moneyness - Moneyness
-
-    ax.plot(HD.M, HD.q_M, "b")
-    ax.plot(RND.M, RND.q_M, "r")
-    ax.plot(M, hd, "b", ls=":")
-    ax.plot(M, rnd, "r", ls=":")
-    ax.text(
-        0.99,
-        0.99,
-        str(day) + "\n" + r"$\tau$ = " + str(tau_day),
-        horizontalalignment="right",
-        verticalalignment="top",
-        transform=ax.transAxes,
-    )
-    ax.set_xlim((1 - x), (1 + x))
-    return fig, hd, rnd, M
-
-
-def create_intervals(sequence, M):
-    last = sequence[0]
-    intervals = []
-    this_interval = [last, M[0]]
-    for i, tf in enumerate(sequence):
-        if tf == last:
-            pass
-        else:
-            this_interval.append(M[i - 1])
-            intervals.append(this_interval)
-            # set up new interval
-            last = tf
-            this_interval = [last, M[i]]
-    this_interval.append(M[i])
-    intervals.append(this_interval)
-    return intervals
-
-
-def add_action(RND, intervals):
-    """add a column with trader's action to the RND dataframe
-
-    Args:
-        RND (class): RND class with object RND.data dataframe
-        intervals (list): list of intervals with [bool, start_idx, end_idx]
-                          True: 'buy', False: 'sell'
-        M (array): array of moneyness values, belonging to start_idx/end_idx
-
-    Returns:
-        class: RND class with new column RND.data.action 'buy'/'sell'
-    """
-    RND.data["action"] = None
-    for interval in intervals:
-        tf, start, end = interval
-        mask = (RND.data.M >= start) & (RND.data.M < end)
-        if tf == True:
-            RND.data.loc[mask, "action"] = "buy"
-        elif tf == False:
-            RND.data.loc[mask, "action"] = "sell"
-    return RND
-
-
-def get_payoff(K, ST, option):
-    if option == "C":
-        return max(ST - K, 0)
-    elif option == "P":
-        return max(K - ST, 0)
-
-
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.7
+n = None
+n = 1
 HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
+df = pd.DataFrame()
 
-day = "2020-04-07"
+day = "2020-04-07"  # 52  - S
+day = "2020-07-14"  # 17  -
+day = "2020-04-05"  # 54  -
+day = "2020-04-26"  # 61  - S
+day = "2020-07-14"  # 17  - K
+day = "2020-07-12"  # 19  -
+day = "2020-06-26"  # 63  - K
+day = "2020-03-11"  # 9   -
+day = "2020-07-05"  # 54  - K
+day = "2020-05-04"  # 53  - S
+tau_day = 53
 print(RndData.analyse(day))
-tau_day = 52
 
-HD, RND = get_densities(
-    RndData,
-    HdData,
-    day,
-    tau_day,
-    x=x,
-    reset_S=True,  # to build +/- Moneyness pairs (0.8, 1.2)
-    overwrite=False,
-    h_densfit=0.25,
-    cutoff=x,
+
+def create_dates(start, end):
+    dates = pd.date_range(start, end, closed="right", freq="D")
+    return [str(date.date()) for date in dates]
+
+
+days = create_dates(start="2020-03-01", end="2020-09-30")
+for day in days:
+    print(day)
+    taus = RndData.analyse(day)
+    for tau in taus:
+        tau_day = tau["_id"]
+        # if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
+        if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
+            near_bound = 0.1
+            far_bound = 0.6
+
+            try:
+                HD, RND = get_densities(
+                    RndData,
+                    HdData,
+                    day,
+                    tau_day,
+                    x=x,
+                    reset_S=False,  # to build +/- Moneyness pairs (0.8, 1.2)
+                    overwrite=False,
+                    h_densfit=0.25,
+                    cutoff=x,
+                )
+            except ValueError as e:
+                logging.error("something wrong with RND: ", day, tau_day)
+                logging.error(e)
+                break
+
+            ########################################################################## PLOT
+            fig, hd, rnd, M = plot_hd_rnd(HD, RND, x, day, tau_day)
+
+            ####################################################### COMPARE HD RND - ACTION
+            buy = rnd < hd
+            intervals = create_intervals(buy, M)
+            RND = add_action(RND, intervals)
+            try:
+                RND = execute_options(RND, day, tau_day)
+                RND = general_trading_payoffs(RND)
+            except KeyError:
+                logging.warning("Maturity not reached yet: ", day, tau_day)
+                break
+
+            for i in [1, 2]:
+                S_trade = "S" + str(i)
+                K_trade = "K" + str(i)
+
+                try:
+                    print(
+                        "----------------------------------------------- {}".format(
+                            S_trade
+                        )
+                    )
+                    # TODO: different prices (S0) and therefore T_payoffs --> total. Take mean for now, but later
+                    #       take min/max for "worst case result"
+                    # TODO: transaction costs
+
+                    # dynamic far_bound - only works for S1 "False" and S2 "True", does NOT work for K-trades
+                    # far_bound = M[buy.tolist().index(False)] - 1
+
+                    trade_calls, trade_puts = skewness_trade(
+                        RND, near_bound, trade_type=S_trade
+                    )
+                    possible_trades = [trade_calls, trade_puts]
+                    s_result, K = trade_results(possible_trades, n)
+                    plt.vlines(
+                        HD.S0 / K, ymin=0, ymax=2, linestyles="-", colors="r", alpha=0.3
+                    )
+                except ValueError as e:
+                    print(e)
+                    s_reult, K = [], []
+
+                try:
+                    print(
+                        "----------------------------------------------- {}".format(
+                            K_trade
+                        )
+                    )
+                    (
+                        otm_call_trades,
+                        atm_call_trades,
+                        atm_put_trades,
+                        otm_put_trades,
+                    ) = kurtosis_trade(RND, near_bound, far_bound, trade_type=K_trade)
+                    atm_trades = [atm_call_trades, atm_put_trades]
+                    atm_result, atm_K = trade_results(atm_trades, n)
+                    plt.vlines(
+                        HD.S0 / atm_K,
+                        ymin=0,
+                        ymax=2,
+                        linestyles=":",
+                        colors="c",
+                        alpha=0.5,
+                    )
+                    otm_trades = [otm_call_trades, otm_put_trades]
+                    otm_result, otm_K = trade_results(otm_trades, n)
+                    plt.vlines(
+                        HD.S0 / otm_K,
+                        ymin=0,
+                        ymax=2,
+                        linestyles=":",
+                        colors="b",
+                        alpha=0.5,
+                    )
+                    k_result = otm_result + atm_result
+                except ValueError as e:
+                    print(e)
+                    k_result, atm_K, otm_k = [], [], []
+
+                add_info = pd.Series(
+                    [day, tau_day, S_trade], index=["date", "tau_day", "trade"]
+                )
+                s_result = s_result.append(add_info)
+                df = df.append(s_result, ignore_index=True)
+
+                add_info = pd.Series(
+                    [day, tau_day, K_trade], index=["date", "tau_day", "trade"]
+                )
+                k_result = k_result.append(add_info)
+                df = df.append(k_result, ignore_index=True)
+
+            print(day, tau_day)
+
+df[["date", "tau_day", "trade", "t0_payoff", "T_payoff", "total"]].to_csv(
+    save_data + "trades_bigTau.csv"
 )
 
-fig, hd, rnd, M = plot_hd_rnd(HD, RND)
-plt.show()
+# # --------------------------------------------------------------------- ANALYZE
+# k = (
+#     RND.data[["M", "K", "t0_payoff", "total", "option", "action"]]
+#     .groupby(by=["K", "option"])
+#     .mean()
+#     .reset_index()
+# )
 
-buy = rnd < hd
-intervals = create_intervals(buy, M)
-RND = add_action(RND, intervals)
+# mask = k.K.isin(atm_K)  # both options
+# k["trade"] = 0
+# k.loc[mask, "trade"] = "Axx"
+# mask = k.K.isin(otm_K)  # both options
+# k.loc[mask, "trade"] = "Oxx"
 
-cols = ["M", "K", "S", "P", "P_BTC", "action", "option"]
-RND.data[cols]
-mask = (RND.data.option == "C") & (RND.data.action == "buy")
-a = RND.data[mask][cols]
-a.groupby(by="K").count()
+# print(k)
 
-eval_day = datetime.strptime(day, "%Y-%m-%d") + timedelta(days=tau_day)
-str(eval_day.date())
+# s = (
+#     RND.data[["M", "K", "t0_payoff", "total", "option", "action"]]
+#     .groupby(by=["K", "option"])
+#     .mean()
+#     .reset_index()
+# )
+# mask = s.K.isin(K)  # both options
+# s["trade"] = 0
+# s.loc[mask, "trade"] = "XXX"
 
+# print(s)
 
-db = connect_db()
-
-coll = db["BTCUSD_deribit"]
-query = {"date_str": str(eval_day.date())}
-ST = get_as_df(coll, query)["price"].iloc[0]
-print(eval_day.date(), ST)
-
-
-RND.data["opt_payoff"] = RND.data.apply(
-    lambda row: get_payoff(row.K, ST, row.option), axis=1
-)
-
-pprint(RND.data[cols + ["opt_payoff"]])
-(RND.data[cols + ["opt_payoff"]]).to_csv(save_data + "{}_trades.csv".format(day))
-
-
-RND.data.groupby(by=["K", "P_BTC"])  # assume that we can buy for the lowest
-# and sell for the highest
-
-strikes = RND.data.groupby(by=["K", "M"]).count().reset_index()[["K", "M"]]
-# TODO: maybe here without "M", if S_reset=False
-
-# S1 trade: 2020-04-07, 52
-
-# far OTM: +/- 0.2 ?
-far_bound = 0.2
-
-call_K = strikes[strikes.M > (1 + far_bound)]["K"]
-
-
-a = 1
+# plt.show()

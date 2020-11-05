@@ -27,10 +27,11 @@ def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
 
     K_hn = 1 / h * kernel(X, x, h)
     f_hn = 1 / n * sum(K_hn)
-    W_hn = K_hn / f_hn
-
+    if f_hn == 0:
+        W_hn = np.zeros(n)
+    else:
+        W_hn = K_hn / f_hn
     W = np.diag(W_hn)
-
     XTW = np.dot(X_matrix.T, W)
 
     beta = np.linalg.pinv(np.dot(XTW, X_matrix)).dot(XTW).dot(Y)

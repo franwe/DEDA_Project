@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from os.path import join
 
-from util.density import density_estimation
+from util.density import density_estimation, density_trafo_K2M
 from util.garch import GARCH
 
 
@@ -19,6 +19,7 @@ class HdCalculator(GARCH):
         overwrite=True,
         target="price",
         window_length=365,
+        moneyness="K_S",
         n=400,
         h=0.15,
         M=5000,
@@ -34,6 +35,7 @@ class HdCalculator(GARCH):
         self.log_returns = self._get_log_returns()
         self.M = M
         self.h = h
+        self.moneyness = moneyness
         self.GARCH = GARCH(
             data=self.log_returns,
             window_length=window_length,
@@ -75,7 +77,14 @@ class HdCalculator(GARCH):
             self.S0 * (1 - self.cutoff), self.S0 * (1 + self.cutoff), 100
         )
         self.q_K = density_estimation(S_arr, self.K, h=self.S0 * self.h)
-        # self.M, self.q_M = density_trafo_K2M(self.K, self.q_K, self.S0, analyze=True)
         self.M = np.linspace((1 - self.cutoff), (1 + self.cutoff), 100)
-        M_arr = np.array(self.S0 / self.ST)
+
+        if self.moneyness == "K_S":
+            M_arr = np.array(self.ST / self.S0)
+        elif self.moneyness == "S_K":
+            M_arr = np.array(self.S0 / self.ST)
         self.q_M = density_estimation(M_arr, self.M, h=self.h)
+        self.M2, self.q_M2 = density_trafo_K2M(
+            self.K, self.q_K, self.S0, moneyness=self.moneyness
+        )
+        a = 1

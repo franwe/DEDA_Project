@@ -27,6 +27,7 @@ def plot_MKM(
     reset_S=False,
     overwrite=False,
     h_densfit=0.2,
+    moneyness="K_S",
 ):
     filename = "T-{}_{}_M-K.png".format(tau_day, day)
     if reset_S:
@@ -37,9 +38,15 @@ def plot_MKM(
     print(S0, day, tau_day)
     if reset_S:
         df_tau["S"] = S0
-        df_tau["M"] = df_tau.S / df_tau.K
 
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
+    if moneyness == "K_S":
+        print("df_moneyness", moneyness)
+        df_tau["M"] = df_tau.K / df_tau.S
+    elif moneyness == "S_K":
+        df_tau["M"] = df_tau.S / df_tau.K
+        print("df_moneyness", moneyness)
+
+    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit, moneyness=moneyness)
     RND.fit_smile()
     RND.rookley()
 
@@ -52,13 +59,18 @@ def plot_MKM(
         n=400,
         M=5000,
         overwrite=overwrite,
+        moneyness=moneyness,
     )
     HD.get_hd(variate=True)
+
+    call_mask = RND.data.option == "C"
+    RND.data["color"] = "blue"  # blue - put
+    RND.data.loc[call_mask, "color"] = "red"  # red - call
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     # --------------------------------------------------- Moneyness - Moneyness
     ax = axes[0]
-    ax.plot(RND.data.M, RND.data.q_M, ".", markersize=5, color="gray")
+    ax.scatter(RND.data.M, RND.data.q_M, 5, c=RND.data.color)
     ax.plot(RND.M, RND.q_M, "-", c="r")
     ax.plot(HD.M, HD.q_M, "-", c="b")
 
@@ -80,7 +92,7 @@ def plot_MKM(
     # ------------------------------------------------------------------ Strike
 
     ax = axes[1]
-    ax.plot(RND.data.K, RND.data.q, ".", markersize=5, color="gray")
+    ax.scatter(RND.data.K, RND.data.q, 5, c=RND.data.color)
     ax.plot(RND.K, RND.q_K, "-", c="r")
     ax.plot(HD.K, HD.q_K, "-", c="b")
 
@@ -114,15 +126,15 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2020-03-01", end="2020-04-30")
+days = create_dates(start="2020-03-01", end="2020-09-30")
 
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        # if (tau_day > 7) & (tau_day <= 40):    # h_densfit  = 0.15
-        if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
+        if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
+            # if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -130,9 +142,10 @@ for day in days:
                     day,
                     tau_day,
                     x=x,
-                    reset_S=True,
+                    reset_S=False,
                     overwrite=False,
-                    h_densfit=0.25,
+                    h_densfit=0.15,
+                    moneyness="S_K",
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:

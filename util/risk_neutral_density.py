@@ -51,12 +51,13 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
 
 
 class RndCalculator:
-    def __init__(self, data, tau_day, date, h_densfit=None, h_iv=None):
+    def __init__(self, data, tau_day, date, moneyness="K_S", h_densfit=None, h_iv=None):
         self.data = data
         self.tau_day = tau_day
         self.date = date
         self.h_iv = self._h(h_iv)
         self.r = 0
+        self.moneyness = moneyness
         self.h_densfit = self._h(h_densfit)
 
         self.tau = self.data.tau.iloc[0]
@@ -115,7 +116,7 @@ class RndCalculator:
 
         # step 2: transform density POINTS from K- to M-domain
         self.data["q_M"] = pointwise_density_trafo_K2M(
-            self.K, self.q_K, self.data.S, self.data.M
+            self.K, self.q_K, self.data.S, self.data.M, moneyness=self.moneyness
         )
 
         # step 3: density points in M-domain - fit density curve

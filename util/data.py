@@ -58,7 +58,7 @@ class RndDataClass:
 
         df_tau = filtered_by_date[(filtered_by_date.tau_day == tau_day)]
         df_tau = df_tau.reset_index()
-        df_tau["M_std"] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
+        # df_tau["M_std"] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
         return df_tau
 
 
