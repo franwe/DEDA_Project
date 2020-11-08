@@ -159,16 +159,33 @@ def execute_options(RND, day, tau_day):
     return RND
 
 
+def calculate_fee(P, S, max_fee_BTC=0.0004, max_fee_pct=0.2):
+    option_bound = max_fee_pct * P
+    underlying_bound = max_fee_BTC * S
+    fee = min(underlying_bound, option_bound)
+    return fee
+
+
 def general_trading_payoffs(RND):
     buy_mask = RND.data.action == "buy"
 
+    RND.data["trading_fee"] = RND.data.apply(
+        lambda row: calculate_fee(row.P, row.S, max_fee_BTC=0.0004), axis=1
+    )
     RND.data["t0_payoff"] = RND.data["P"]
     RND.data.loc[buy_mask, "t0_payoff"] = -1 * RND.data.loc[buy_mask, "P"]
+    RND.data["t0_payoff"] = RND.data["t0_payoff"] - RND.data["trading_fee"]
 
     RND.data["T_payoff"] = -1 * RND.data["opt_payoff"]
     RND.data.loc[buy_mask, "T_payoff"] = (
         +1 * RND.data.loc[buy_mask, "opt_payoff"]
     )
+    RND.data["delivery_fee"] = RND.data.apply(
+        lambda row: calculate_fee(row.T_payoff, row.S, max_fee_BTC=0.0002),
+        axis=1,
+    )
+    RND.data.loc[~buy_mask, "delivery_fee"] = 0  # only applies to TAKER ORDERS
+    RND.data["T_payoff"] = RND.data["T_payoff"] - RND.data["delivery_fee"]
 
     RND.data["total"] = RND.data.t0_payoff + RND.data.T_payoff
     return RND
