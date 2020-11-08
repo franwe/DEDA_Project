@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from util.smoothing import local_polynomial, bspline
-from util.density import density_trafo_K2M, pointwise_density_trafo_K2M
+from util.density import pointwise_density_trafo_K2M
 
 
 def spd_appfinance(M, S, K, o, o1, o2, r, tau):
@@ -25,12 +25,14 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
     dd_d1_M = (
         -(1 / (M * o * st)) * (1 / M + o1 / o)
         + o2 * (st / 2 - (np.log(M) + rt) / (o ** 2 * st))
-        + o1 * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
+        + o1
+        * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
     )
     dd_d2_M = (
         -(1 / (M * o * st)) * (1 / M + o1 / o)
         - o2 * (st / 2 + (np.log(M) + rt) / (o ** 2 * st))
-        + o1 * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
+        + o1
+        * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
     )
 
     d_c_M = (
@@ -40,7 +42,9 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
     )
     dd_c_M = (
         norm.pdf(d1) * (dd_d1_M - d1 * (d_d1_M) ** 2)
-        - norm.pdf(d2) / (ert * M) * (dd_d2_M - 2 / M * d_d2_M - d2 * (d_d2_M) ** 2)
+        - norm.pdf(d2)
+        / (ert * M)
+        * (dd_d2_M - 2 / M * d_d2_M - d2 * (d_d2_M) ** 2)
         - 2 * norm.cdf(d2) / (ert * M ** 3)
     )
 
@@ -51,13 +55,12 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
 
 
 class RndCalculator:
-    def __init__(self, data, tau_day, date, moneyness="K_S", h_densfit=None, h_iv=None):
+    def __init__(self, data, tau_day, date, h_densfit=None, h_iv=None):
         self.data = data
         self.tau_day = tau_day
         self.date = date
         self.h_iv = self._h(h_iv)
         self.r = 0
-        self.moneyness = moneyness
         self.h_densfit = self._h(h_densfit)
 
         self.tau = self.data.tau.iloc[0]
@@ -69,7 +72,7 @@ class RndCalculator:
         self.smile = None
         self.first = None
         self.second = None
-        self.f = None  #  might delete later
+        self.f = None  # might delete later
 
     def _h(self, h):
         if h is None:
@@ -77,18 +80,24 @@ class RndCalculator:
         else:
             return h
 
-    # ------------------------------------------------------------------ SPD NORMAL
+    # -------------------------------------------------------------- SPD NORMAL
     def fit_smile(self):
         X = np.array(self.data.M)
         Y = np.array(self.data.iv)
-        self.smile, self.first, self.second, self.M_smile, self.f = local_polynomial(
-            X, Y, self.h_iv
-        )
+        (
+            self.smile,
+            self.first,
+            self.second,
+            self.M_smile,
+            self.f,
+        ) = local_polynomial(X, Y, self.h_iv)
 
     def rookley(self):
         spd = spd_appfinance
-        # ---------------------------------------- B-SPLINE on SMILE, FIRST, SECOND
-        pars, spline, points = bspline(self.M_smile, self.smile, sections=8, degree=3)
+        # ------------------------------------ B-SPLINE on SMILE, FIRST, SECOND
+        pars, spline, points = bspline(
+            self.M_smile, self.smile, sections=8, degree=3
+        )
         # derivatives
         first_fct = spline.derivative(1)
         second_fct = spline.derivative(2)
@@ -116,7 +125,7 @@ class RndCalculator:
 
         # step 2: transform density POINTS from K- to M-domain
         self.data["q_M"] = pointwise_density_trafo_K2M(
-            self.K, self.q_K, self.data.S, self.data.M, moneyness=self.moneyness
+            self.K, self.q_K, self.data.S, self.data.M
         )
 
         # step 3: density points in M-domain - fit density curve

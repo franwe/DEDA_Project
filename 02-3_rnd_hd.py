@@ -7,6 +7,7 @@ import numpy as np
 from util.data import RndDataClass, HdDataClass
 from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
+from util.density import hd_rnd_domain
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
@@ -27,7 +28,6 @@ def plot_MKM(
     reset_S=False,
     overwrite=False,
     h_densfit=0.2,
-    moneyness="K_S",
 ):
     filename = "T-{}_{}_M-K.png".format(tau_day, day)
     if reset_S:
@@ -38,15 +38,9 @@ def plot_MKM(
     print(S0, day, tau_day)
     if reset_S:
         df_tau["S"] = S0
-
-    if moneyness == "K_S":
-        print("df_moneyness", moneyness)
-        df_tau["M"] = df_tau.K / df_tau.S
-    elif moneyness == "S_K":
         df_tau["M"] = df_tau.S / df_tau.K
-        print("df_moneyness", moneyness)
 
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit, moneyness=moneyness)
+    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
     RND.fit_smile()
     RND.rookley()
 
@@ -59,7 +53,6 @@ def plot_MKM(
         n=400,
         M=5000,
         overwrite=overwrite,
-        moneyness=moneyness,
     )
     HD.get_hd(variate=True)
 
@@ -89,13 +82,14 @@ def plot_MKM(
     ax.vlines(1, 0, RND.data.q_M.max())
     ax.set_xlabel("Moneyness M")
 
-    # ------------------------------------------------------------------ Strike
-
+    # ------------------------------------------------- Kernel K = q/p = rnd/hd
+    hd, rnd, M = hd_rnd_domain(
+        HD, RND, interval=[RND.data.M.min() * 0.9, RND.data.M.max() * 1.1]
+    )
+    K = rnd / hd
     ax = axes[1]
-    ax.scatter(RND.data.K, RND.data.q, 5, c=RND.data.color)
-    ax.plot(RND.K, RND.q_K, "-", c="r")
-    ax.plot(HD.K, HD.q_K, "-", c="b")
-
+    ax.plot(M, K, "-", c="k")
+    ax.axhspan(0.7, 1.3, color="grey", alpha=0.5)
     ax.text(
         0.99,
         0.99,
@@ -104,12 +98,10 @@ def plot_MKM(
         verticalalignment="top",
         transform=ax.transAxes,
     )
-    ax.set_xlim((1 - x) * S0, (1 + x) * S0)
-    if y_lim:
-        ax.set_ylim(0, y_lim["K"])
-    ax.set_ylim(0)
-    ax.set_xlabel("Strike Price K")
-    ax.vlines(S0, 0, RND.data.q.max())
+    ax.set_xlim((1 - x), (1 + x))
+    ax.set_ylim(0, 2)
+    ax.set_ylabel("K = rnd / hd")
+    ax.set_xlabel("Moneyness")
     plt.tight_layout()
     return fig, filename
 
@@ -126,15 +118,16 @@ def create_dates(start, end):
     return [str(date.date()) for date in dates]
 
 
-days = create_dates(start="2020-03-01", end="2020-09-30")
+days = create_dates(start="2020-05-25", end="2020-09-30")
 
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
-            # if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
+        # if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
+        # if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
+        if (tau_day > 99) & (tau_day <= 175):  # h_densfit = 0.35
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -144,8 +137,7 @@ for day in days:
                     x=x,
                     reset_S=False,
                     overwrite=False,
-                    h_densfit=0.15,
-                    moneyness="S_K",
+                    h_densfit=0.25,
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:

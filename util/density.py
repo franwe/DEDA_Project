@@ -25,7 +25,7 @@ def integrate(x, y):
     return simps(y, x)
 
 
-def density_trafo_K2M(K, q_K, S, moneyness="K_S", analyze=False):
+def density_trafo_K2M(K, q_K, S, analyze=False):
     """
     ------- :
     K       : K-domain of density
@@ -42,16 +42,13 @@ def density_trafo_K2M(K, q_K, S, moneyness="K_S", analyze=False):
     M = np.linspace(0.5, 1.5, num)
     q_M = np.zeros(num)
     for i, m in enumerate(M):
-        if moneyness == "S_K":
-            q_M[i] = S / (m ** 2) * q_K(S / m)
-        elif moneyness == "K_S":
-            q_M[i] = S * q_K(S * m)
+        q_M[i] = S / (m ** 2) * q_K(S / m)
     if analyze:
         print("in M: ", integrate(M, q_M))
     return M, q_M
 
 
-def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals, moneyness="K_S"):
+def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals):
     """
     ------- :
     K       : K-domain of density
@@ -66,8 +63,15 @@ def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals, moneyness="K_S"):
     q_pointsM = np.zeros(points)
 
     for i, m, s in zip(range(points), M_vals, S_vals):
-        if moneyness == "S_K":
-            q_pointsM[i] = s / (m ** 2) * q_K(s / m)
-        elif moneyness == "K_S":
-            q_pointsM[i] = s * q_K(s * m)
+        q_pointsM[i] = s / (m ** 2) * q_K(s / m)
     return q_pointsM
+
+
+def hd_rnd_domain(HD, RND, interval=[0.5, 1.5]):
+    _, HD_spline, _ = bspline(HD.M, HD.q_M, sections=15, degree=2)
+    _, RND_spline, _ = bspline(RND.M, RND.q_M, sections=15, degree=2)
+    M = np.linspace(interval[0], interval[1], 100)
+
+    hd = HD_spline(M)
+    rnd = RND_spline(M)
+    return hd, rnd, M
