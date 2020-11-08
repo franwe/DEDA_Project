@@ -73,7 +73,7 @@ class GARCH:
         if os.path.exists(self.filename_garchmodel) and (
             self.overwrite_garchmodel == False
         ):
-            print(" -------------- use existing GARCH model")
+            # print(" -------------- use existing GARCH model")
             return
         start = self.window_length + self.n
         end = self.n
@@ -87,7 +87,9 @@ class GARCH:
             window = self.data[end - i : start - i]
             data = window - np.mean(window)
 
-            res, parameters[i, :], parameter_bounds[i, :] = self._GARCH_fit(data)
+            res, parameters[i, :], parameter_bounds[i, :] = self._GARCH_fit(
+                data
+            )
 
             _, omega, alpha, beta = [
                 res.params["mu"],
@@ -116,7 +118,9 @@ class GARCH:
         self.sigma2_process = sigma2_process
 
         # ------------------------------------------- kernel density estimation
-        self.z_values = np.linspace(min(self.z_process), max(self.z_process), 500)
+        self.z_values = np.linspace(
+            min(self.z_process), max(self.z_process), 500
+        )
         h_dyn = self.z_h * (np.max(z_process) - np.min(z_process))
         self.z_dens = density_estimation(
             np.array(z_process), np.array(self.z_values), h=h_dyn
@@ -163,7 +167,9 @@ class GARCH:
         return new_pars
 
     def simulate_paths(self, horizon, M, variate=True):
-        print(" -------------- simulate paths for: ", self.data_name, horizon, M)
+        print(
+            " -------------- simulate paths for: ", self.data_name, horizon, M
+        )
         if os.path.exists(self.filename_garchmodel) and (
             self.overwrite_garchmodel == False
         ):
@@ -178,7 +184,9 @@ class GARCH:
         print("garch parameters :  ", pars)
         np.random.seed(1)  # for reproducability in _variate_pars()
 
-        new_pars = copy.deepcopy(pars)  # set pars for first round of simulation
+        new_pars = copy.deepcopy(
+            pars
+        )  # set pars for first round of simulation
         save_sigma = np.zeros((self.no_of_paths_to_save, horizon))
         save_e = np.zeros((self.no_of_paths_to_save, horizon))
         all_summed_returns = np.zeros(M)
