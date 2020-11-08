@@ -1,15 +1,14 @@
 import os
-from matplotlib import pyplot as plt
 from os.path import join
 import pandas as pd
 import logging
+from copy import deepcopy
 
-logging.basicConfig(filename="trading.log", level=logging.DEBUG)
+logging.basicConfig(filename="trading.log")  # , level=logging.DEBUG)
 
 from util.data import RndDataClass, HdDataClass
 from util.trading import (
     get_densities,
-    plot_hd_rnd,
     create_intervals,
     add_action,
     execute_options,
@@ -18,6 +17,7 @@ from util.trading import (
     kurtosis_trade,
     trade_results,
 )
+from util.density import hd_rnd_domain
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
@@ -26,25 +26,31 @@ save_plots = join(cwd, "plots") + os.sep
 garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
-x = 0.7
-n = None
-n = 1
+x = 0.5
+n = 1  # None
+
+
+def load_tau_section_parameters(tau_section):
+    if tau_section == "small":
+        return "trades_smallTau.csv", 0.1, 0.3, 0.15, 7, 40
+    elif tau_section == "big":
+        return "trades_bigTau.csv", 0.15, 0.35, 0.25, 40, 99
+    elif tau_section == "huge":
+        return "trades_hugeTau.csv", 0.2, 0.4, 0.35, 99, 182
+
+
+(
+    filename,
+    near_bound,
+    far_bound,
+    h,
+    tau_min,
+    tau_max,
+) = load_tau_section_parameters("huge")
+
 HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 df = pd.DataFrame()
-
-day = "2020-04-07"  # 52  - S
-day = "2020-07-14"  # 17  -
-day = "2020-04-05"  # 54  -
-day = "2020-04-26"  # 61  - S
-day = "2020-07-14"  # 17  - K
-day = "2020-07-12"  # 19  -
-day = "2020-06-26"  # 63  - K
-day = "2020-03-11"  # 9   -
-day = "2020-07-05"  # 54  - K
-day = "2020-05-04"  # 53  - S
-tau_day = 53
-print(RndData.analyse(day))
 
 
 def create_dates(start, end):
@@ -54,14 +60,11 @@ def create_dates(start, end):
 
 days = create_dates(start="2020-03-01", end="2020-09-30")
 for day in days:
-    print(day)
     taus = RndData.analyse(day)
     for tau in taus:
+        found_trades = False
         tau_day = tau["_id"]
-        # if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
-        if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
-            near_bound = 0.1
-            far_bound = 0.6
+        if (tau_day > tau_min) & (tau_day <= tau_max):
 
             try:
                 HD, RND = get_densities(
@@ -72,138 +75,158 @@ for day in days:
                     x=x,
                     reset_S=False,  # to build +/- Moneyness pairs (0.8, 1.2)
                     overwrite=False,
-                    h_densfit=0.25,
+                    h_densfit=h,
                     cutoff=x,
                 )
-            except ValueError as e:
-                logging.error("something wrong with RND: ", day, tau_day)
-                logging.error(e)
+            except ValueError:
+                logging.info(day, tau_day, " ---- something wrong with RND")
+                # logging.info(e)
+                break
+            except ZeroDivisionError:
+                logging.info(
+                    day, tau_day, " ---- No data for this day, maturity"
+                )
+                # logging.info(e)
                 break
 
-            ########################################################################## PLOT
-            fig, hd, rnd, M = plot_hd_rnd(HD, RND, x, day, tau_day)
+            # ------------------------------------------------------------ PLOT
+            hd, rnd, M = hd_rnd_domain(
+                HD,
+                RND,
+                interval=[RND.data.M.min() * 0.9, RND.data.M.max() * 1.1],
+            )
 
-            ####################################################### COMPARE HD RND - ACTION
+            # ----------------------------------------- COMPARE HD RND - ACTION
             buy = rnd < hd
             intervals = create_intervals(buy, M)
             RND = add_action(RND, intervals)
+
+            # ----------------------------------------- KERNEL DEVIATES FROM 1?
+            Kernel = rnd / hd
+            K_bound = 0.3
+            around_one = (Kernel > 1 - K_bound) & (Kernel < 1 + K_bound)
+            deviates_from_one_ratio = 1 - around_one.sum() / len(Kernel)
+
             try:
                 RND = execute_options(RND, day, tau_day)
                 RND = general_trading_payoffs(RND)
             except KeyError:
-                logging.warning("Maturity not reached yet: ", day, tau_day)
+                logging.info(day, tau_day, " ---- Maturity not reached yet")
+                # logging.info(e)
                 break
 
-            for i in [1, 2]:
-                S_trade = "S" + str(i)
-                K_trade = "K" + str(i)
+            trades_list = []
+            trade_entry_blanc = {
+                "date": day,
+                "tau_day": tau_day,
+                "kernel": deviates_from_one_ratio,
+                "trade": "-",
+                "total": 0,
+                "t0_payoff": 0,
+                "T_payoff": 0,
+                "K": "-",
+            }
 
+            for S_trade in ["S1", "S2"]:
                 try:
-                    print(
-                        "----------------------------------------------- {}".format(
-                            S_trade
-                        )
-                    )
-                    # TODO: different prices (S0) and therefore T_payoffs --> total. Take mean for now, but later
-                    #       take min/max for "worst case result"
-                    # TODO: transaction costs
-
-                    # dynamic far_bound - only works for S1 "False" and S2 "True", does NOT work for K-trades
-                    # far_bound = M[buy.tolist().index(False)] - 1
-
                     trade_calls, trade_puts = skewness_trade(
-                        RND, near_bound, trade_type=S_trade
+                        RND, far_bound, trade_type=S_trade
                     )
                     possible_trades = [trade_calls, trade_puts]
-                    s_result, K = trade_results(possible_trades, n)
-                    plt.vlines(
-                        HD.S0 / K, ymin=0, ymax=2, linestyles="-", colors="r", alpha=0.3
-                    )
-                except ValueError as e:
-                    print(e)
-                    s_reult, K = [], []
+                    result, K = trade_results(possible_trades, n)
 
-                try:
-                    print(
-                        "----------------------------------------------- {}".format(
-                            K_trade
-                        )
+                    trade_entry = deepcopy(trade_entry_blanc)
+                    trade_entry.update(
+                        {
+                            "trade": S_trade,
+                            "total": result.total,
+                            "t0_payoff": result.t0_payoff,
+                            "T_payoff": result.T_payoff,
+                            "K": K,
+                        }
                     )
+                    trades_list.append(trade_entry)
+
+                except ValueError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        S_trade,
+                        " ---- Trade can't be created",
+                    )
+                    # logging.info(e)
+                except AttributeError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        S_trade,
+                        " ---- Trade can't be created",
+                    )
+                    # logging.info(e)
+
+            for K_trade in ["K1", "K2"]:
+                try:
                     (
                         otm_call_trades,
                         atm_call_trades,
                         atm_put_trades,
                         otm_put_trades,
-                    ) = kurtosis_trade(RND, near_bound, far_bound, trade_type=K_trade)
+                    ) = kurtosis_trade(
+                        RND, near_bound, far_bound, trade_type=K_trade
+                    )
                     atm_trades = [atm_call_trades, atm_put_trades]
-                    atm_result, atm_K = trade_results(atm_trades, n)
-                    plt.vlines(
-                        HD.S0 / atm_K,
-                        ymin=0,
-                        ymax=2,
-                        linestyles=":",
-                        colors="c",
-                        alpha=0.5,
-                    )
                     otm_trades = [otm_call_trades, otm_put_trades]
+
+                    atm_result, atm_K = trade_results(atm_trades, n)
                     otm_result, otm_K = trade_results(otm_trades, n)
-                    plt.vlines(
-                        HD.S0 / otm_K,
-                        ymin=0,
-                        ymax=2,
-                        linestyles=":",
-                        colors="b",
-                        alpha=0.5,
+
+                    if (otm_result is None) or (atm_result is None):
+                        pass
+                    else:
+                        result = otm_result + atm_result
+                        trade_entry = deepcopy(trade_entry_blanc)
+                        trade_entry.update(
+                            {
+                                "trade": K_trade,
+                                "total": result.total,
+                                "t0_payoff": result.t0_payoff,
+                                "T_payoff": result.T_payoff,
+                                "K": atm_K + otm_K,
+                            }
+                        )
+                        trades_list.append(trade_entry)
+
+                except ValueError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        K_trade,
+                        " ---- Trade can't be created",
                     )
-                    k_result = otm_result + atm_result
-                except ValueError as e:
-                    print(e)
-                    k_result, atm_K, otm_k = [], [], []
+                    # logging.info(e)
+                except AttributeError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        K_trade,
+                        " ---- Trade can't be created",
+                    )
+                    # logging.info(e)
 
-                add_info = pd.Series(
-                    [day, tau_day, S_trade], index=["date", "tau_day", "trade"]
+            if len(trades_list) > 0:
+                df = df.append(trades_list, ignore_index=True)
+                print(
+                    day,
+                    tau_day,
+                    "-------",
+                    pd.DataFrame(trades_list).trade.tolist(),
                 )
-                s_result = s_result.append(add_info)
-                df = df.append(s_result, ignore_index=True)
 
-                add_info = pd.Series(
-                    [day, tau_day, K_trade], index=["date", "tau_day", "trade"]
-                )
-                k_result = k_result.append(add_info)
-                df = df.append(k_result, ignore_index=True)
+            else:
+                df = df.append([trade_entry_blanc], ignore_index=True)
+                print(day, tau_day, "------- ----------")
 
-            print(day, tau_day)
 
-df[["date", "tau_day", "trade", "t0_payoff", "T_payoff", "total"]].to_csv(
-    save_data + "trades_bigTau.csv"
-)
-
-# # --------------------------------------------------------------------- ANALYZE
-# k = (
-#     RND.data[["M", "K", "t0_payoff", "total", "option", "action"]]
-#     .groupby(by=["K", "option"])
-#     .mean()
-#     .reset_index()
-# )
-
-# mask = k.K.isin(atm_K)  # both options
-# k["trade"] = 0
-# k.loc[mask, "trade"] = "Axx"
-# mask = k.K.isin(otm_K)  # both options
-# k.loc[mask, "trade"] = "Oxx"
-
-# print(k)
-
-# s = (
-#     RND.data[["M", "K", "t0_payoff", "total", "option", "action"]]
-#     .groupby(by=["K", "option"])
-#     .mean()
-#     .reset_index()
-# )
-# mask = s.K.isin(K)  # both options
-# s["trade"] = 0
-# s.loc[mask, "trade"] = "XXX"
-
-# print(s)
-
-# plt.show()
+df[
+    ["date", "tau_day", "total", "t0_payoff", "T_payoff", "trade", "kernel"]
+].to_csv(save_data + filename, index=False)

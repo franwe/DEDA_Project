@@ -8,6 +8,7 @@ from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
 from util.smoothing import bspline
 from util.connect_db import connect_db, get_as_df
+from util.density import hd_rnd_domain
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
@@ -27,7 +28,6 @@ def get_densities(
     overwrite=False,
     h_densfit=0.15,
     cutoff=0.5,
-    moneyness="S_K",
 ):
 
     df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
@@ -39,7 +39,7 @@ def get_densities(
 
     df_tau["M"] = df_tau.S / df_tau.K
 
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit, moneyness=moneyness)
+    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
     RND.fit_smile()
     RND.rookley()
 
@@ -53,33 +53,32 @@ def get_densities(
         n=400,
         M=5000,
         overwrite=overwrite,
-        moneyness=moneyness,
     )
     HD.get_hd(variate=True)
     return HD, RND
 
 
 def plot_hd_rnd(HD, RND, x, day, tau_day):
-    _, HD_spline, _ = bspline(HD.M, HD.q_M, sections=15, degree=2)
-    _, RND_spline, _ = bspline(RND.M, RND.q_M, sections=15, degree=2)
-    M = np.linspace(min(min(RND.M), min(HD.M)), max(max(RND.M), max(HD.M)), 100)
-    M = np.linspace(1 - x, 1 + x, 100)
-
-    hd = HD_spline(M)
-    rnd = RND_spline(M)
-
+    hd, rnd, M = hd_rnd_domain(
+        # HD,
+        # RND,
+        # interval=[1 - x, 1 + x]
+        HD,
+        RND,
+        interval=[RND.data.M.min() * 0.9, RND.data.M.max() * 1.1],
+    )
     calls = RND.data[RND.data.option == "C"]
     puts = RND.data[RND.data.option == "P"]
 
+    # -------------------------------------------------------------------- Plot
     fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-    # --------------------------------------------------- Moneyness - Moneyness
 
     ax.plot(HD.M, HD.q_M, "b")
     ax.plot(RND.M, RND.q_M, "r")
     ax.plot(M, hd, "b", ls=":")
     ax.plot(M, rnd, "r", ls=":")
-    ax.scatter(calls.M, calls.q_M, 5, c="b", label="calls")
-    ax.scatter(puts.M, puts.q_M, 5, c="r", label="puts")
+    ax.scatter(calls.M, calls.q_M, 5, c="r", label="calls")
+    ax.scatter(puts.M, puts.q_M, 5, c="b", label="puts")
 
     ax.text(
         0.99,
@@ -167,7 +166,9 @@ def general_trading_payoffs(RND):
     RND.data.loc[buy_mask, "t0_payoff"] = -1 * RND.data.loc[buy_mask, "P"]
 
     RND.data["T_payoff"] = -1 * RND.data["opt_payoff"]
-    RND.data.loc[buy_mask, "T_payoff"] = +1 * RND.data.loc[buy_mask, "opt_payoff"]
+    RND.data.loc[buy_mask, "T_payoff"] = (
+        +1 * RND.data.loc[buy_mask, "opt_payoff"]
+    )
 
     RND.data["total"] = RND.data.t0_payoff + RND.data.T_payoff
     return RND
@@ -200,8 +201,12 @@ def skewness_trade(RND, far_bound, trade_type="S1"):
         call_action = "sell"
         put_action = "buy"
 
-    far_call_mask = create_trading_mask(RND, "C", call_action, [0, 1 - far_bound])
-    far_put_mask = create_trading_mask(RND, "P", put_action, [1 + far_bound, 2])
+    far_call_mask = create_trading_mask(
+        RND, "C", call_action, [0, 1 - far_bound]
+    )
+    far_put_mask = create_trading_mask(
+        RND, "P", put_action, [1 + far_bound, 2]
+    )
 
     trade_calls = get_trades_from_df(RND, far_call_mask)
     trade_puts = get_trades_from_df(RND, far_put_mask)
@@ -216,8 +221,7 @@ def trade_results(possible_trades, n=None):
     n_max = min(shapes)  # max possible n to have symmetric trade
 
     if n_max == 0:
-        print("trade not possible, cannot hedge the other side")
-        return [], []
+        return None, None
 
     if n is None:
         n = n_max
@@ -241,12 +245,24 @@ def kurtosis_trade(RND, near_bound, far_bound, trade_type="K1"):
         otm_action = "sell"
 
     otm_call_mask = create_trading_mask(
-        RND, "C", otm_action, [1 - far_bound, 1 - near_bound]
+        # RND, "C", otm_action, [1 - far_bound, 1 - near_bound]
+        RND,
+        "C",
+        otm_action,
+        [0, 1 - near_bound],
     )
-    atm_call_mask = create_trading_mask(RND, "C", atm_action, [1 - near_bound, 1])
-    atm_put_mask = create_trading_mask(RND, "P", atm_action, [1, 1 + near_bound])
+    atm_call_mask = create_trading_mask(
+        RND, "C", atm_action, [1 - near_bound, 1]
+    )
+    atm_put_mask = create_trading_mask(
+        RND, "P", atm_action, [1, 1 + near_bound]
+    )
     otm_put_mask = create_trading_mask(
-        RND, "P", otm_action, [1 + near_bound, 1 + far_bound]
+        # RND, "P", otm_action, [1 + near_bound, 1 + far_bound]
+        RND,
+        "P",
+        otm_action,
+        [1 + near_bound, 2],
     )
 
     otm_call_trades = get_trades_from_df(RND, otm_call_mask)
