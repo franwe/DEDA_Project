@@ -10,18 +10,23 @@ from os.path import join
 import flask
 import glob
 
+from util.plotly import plotly_plot
+
+
+external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
-save_data = join(cwd, "data", "03-1_trades") + os.sep
+trade_data_directory = join(cwd, "data", "03-1_trades") + os.sep
 image_directory = join(cwd, "plots") + os.sep
 static_image_route = "/static/"
 list_of_images = [
     os.path.basename(x) for x in glob.glob("{}*.png".format(image_directory))
 ]
 
-df = pd.read_csv(save_data + "trades_02.csv")
-# df["id"] = range(0, df.shape[0])
+
+df = pd.read_csv(trade_data_directory + "trades_smallTau.csv")
+df["id"] = range(0, df.shape[0])
 df.set_index("id", inplace=True, drop=False)
 
 
@@ -54,12 +59,15 @@ def evaluate(dff):
 
 df_evaluate = pd.DataFrame(evaluate(df))
 
-app = dash.Dash(__name__)
+# app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+styles = {"pre": {"border": "thin lightgrey solid", "overflowX": "scroll"}}
 application = app.server
 
 app.layout = html.Div(
     [
-        html.Img(id="image"),
+        dcc.Graph(id="plot"),
         dcc.Markdown(""" ## Trades Table """),
         dash_table.DataTable(
             id="datatable-row-ids",
@@ -106,10 +114,6 @@ app.layout = html.Div(
             page_current=0,
             page_size=10,
         ),
-        # html.Div(
-        #     id="textbox-aggregate-table",
-        #     children="Here will be aggregated values of table",
-        # ),
         html.Div(id="datatable-row-ids-container"),
     ]
 )
@@ -258,23 +262,14 @@ def update_graphs(row_ids, selected_row_ids, active_cell):
 
 
 @app.callback(
-    dash.dependencies.Output("image", "src"),
+    dash.dependencies.Output("plot", "figure"),
     [
         Input("datatable-row-ids", "derived_virtual_row_ids"),
         Input("datatable-row-ids", "selected_row_ids"),
         Input("datatable-row-ids", "active_cell"),
     ],
 )
-def update_image_src(row_ids, selected_row_ids, active_cell):
-    # When the table is first rendered, `derived_virtual_data` and
-    # `derived_virtual_selected_rows` will be `None`. This is due to an
-    # idiosyncrasy in Dash (unsupplied properties are always None and Dash
-    # calls the dependent callbacks when the component is first rendered).
-    # So, if `rows` is `None`, then the component was just rendered
-    # and its value will be the same as the component's dataframe.
-    # Instead of setting `None` in here, you could also set
-    # `derived_virtual_data=df.to_rows('dict')` when you initialize
-    # the component.
+def update_plot(row_ids, selected_row_ids, active_cell):
 
     if row_ids is None:
         dff = df
@@ -283,24 +278,13 @@ def update_image_src(row_ids, selected_row_ids, active_cell):
         dff = df.loc[row_ids]
 
     i = selected_row_ids[0] if selected_row_ids else dff.id.tolist()[0]
-    image_path = "T-{}_{}_M-K".format(
-        int(df.loc[i, "tau_day"]), df.loc[i, "date"]
-    )
-    value = "{}.png".format(image_path)
-    return static_image_route + value
+    day = df.loc[i, "date"]
+    tau_day = int(df.loc[i, "tau_day"])
+    trade_type = df.loc[i, "trade"]
 
-
-# Add a static image route that serves images from desktop
-# Be *very* careful here - you don't want to serve arbitrary files
-# from your computer or server
-@app.server.route("{}<image_path>.png".format(static_image_route))
-def serve_image(image_path):
-    image_name = "{}.png".format(image_path)
-    if image_name not in list_of_images:
-        raise Exception(
-            '"{}" is excluded from the allowed static files'.format(image_path)
-        )
-    return flask.send_from_directory(image_directory, image_name)
+    # fig = plot_trades(data, trade_type)
+    fig = plotly_plot(trade_data_directory, day, tau_day, trade_type)
+    return fig
 
 
 if __name__ == "__main__":

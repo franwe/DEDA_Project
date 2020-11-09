@@ -1,9 +1,10 @@
 import os
 from matplotlib import pyplot as plt
 from os.path import join
-import pandas as pd
 import numpy as np
+import pickle
 
+from util.general import create_dates, load_tau_section_parameters
 from util.data import RndDataClass, HdDataClass
 from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
@@ -18,6 +19,21 @@ garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 # --------------------------------------------------------------------- 2D PLOT
 
 
+def save_data_to_pickle(day, tau_day, RND, rnd, hd, M, K, fig):
+    data = {
+        "date": day,
+        "tau_day": tau_day,
+        "RND": RND,
+        "rnd": rnd,
+        "hd": hd,
+        "M": M,
+        "kernel": K,
+        "figure": fig,
+    }
+    with open(save_data + "T-{}_{}.pkl".format(tau_day, day), "wb") as handle:
+        pickle.dump(data, handle)
+
+
 def plot_MKM(
     RndData,
     HdData,
@@ -25,9 +41,10 @@ def plot_MKM(
     tau_day,
     x,
     y_lim=None,
-    reset_S=False,
+    reset_S=True,
     overwrite=False,
     h_densfit=0.2,
+    save=False,
 ):
     filename = "T-{}_{}_M-K.png".format(tau_day, day)
     if reset_S:
@@ -84,7 +101,7 @@ def plot_MKM(
 
     # ------------------------------------------------- Kernel K = q/p = rnd/hd
     hd, rnd, M = hd_rnd_domain(
-        HD, RND, interval=[RND.data.M.min() * 0.9, RND.data.M.max() * 1.1]
+        HD, RND, interval=[RND.data.M.min() * 0.99, RND.data.M.max() * 1.01]
     )
     K = rnd / hd
     ax = axes[1]
@@ -103,6 +120,10 @@ def plot_MKM(
     ax.set_ylabel("K = rnd / hd")
     ax.set_xlabel("Moneyness")
     plt.tight_layout()
+
+    if save:
+        save_data_to_pickle(day, tau_day, RND, rnd, hd, M, K, fig)
+
     return fig, filename
 
 
@@ -112,22 +133,15 @@ HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 
+(_, _, _, h, tau_min, tau_max) = load_tau_section_parameters("big")
 
-def create_dates(start, end):
-    dates = pd.date_range(start, end, closed="right", freq="D")
-    return [str(date.date()) for date in dates]
-
-
-days = create_dates(start="2020-05-25", end="2020-09-30")
-
+days = create_dates(start="2020-03-01", end="2020-09-30")
 for day in days:
     print(day)
     taus = RndData.analyse(day)
     for tau in taus:
         tau_day = tau["_id"]
-        # if (tau_day > 7) & (tau_day <= 40):  # h_densfit  = 0.15
-        # if (tau_day > 40) & (tau_day <= 99):  # h_densfit = 0.25
-        if (tau_day > 99) & (tau_day <= 175):  # h_densfit = 0.35
+        if (tau_day > tau_min) & (tau_day <= tau_max):
             try:
                 fig, filename = plot_MKM(
                     RndData,
@@ -135,9 +149,10 @@ for day in days:
                     day,
                     tau_day,
                     x=x,
-                    reset_S=False,
+                    reset_S=True,
                     overwrite=False,
-                    h_densfit=0.25,
+                    h_densfit=h,
+                    save=True,
                 )
                 fig.savefig(join(save_plots, filename), transparent=True)
             except ValueError as e:

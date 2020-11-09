@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from os.path import join
 import numpy as np
 from datetime import datetime, timedelta
+import pickle
 
 from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
@@ -24,7 +25,7 @@ def get_densities(
     tau_day,
     x,
     y_lim=None,
-    reset_S=False,
+    reset_S=True,
     overwrite=False,
     h_densfit=0.15,
     cutoff=0.5,
@@ -152,10 +153,11 @@ def execute_options(RND, day, tau_day):
     query = {"date_str": day}
     S0 = get_as_df(coll, query)["price"].iloc[0]
 
+    RND.data["ST"] = ST
     RND.data["opt_payoff"] = RND.data.apply(
         lambda row: get_payoff(row.K, ST, row.option), axis=1
     )
-    print(S0, ST, S0 / ST)
+    print("--- S0: {} --- ST: {} --- M: {}".format(S0, ST, S0 / ST))
     return RND
 
 
@@ -201,12 +203,16 @@ def create_trading_mask(RND, option, action, M_interval):
     return trading_mask
 
 
-def get_trades_from_df(RND, trading_mask):
+def get_trades_from_df(RND, trading_mask, option):
     trades = (
-        RND.data[trading_mask][["t0_payoff", "T_payoff", "total", "K"]]
+        RND.data[trading_mask][
+            ["t0_payoff", "T_payoff", "total", "K", "option"]
+        ]
         .groupby(by="K")
         .mean()
     )
+    trades = trades.reset_index()
+    trades["option"] = option
     return trades
 
 
@@ -225,8 +231,8 @@ def skewness_trade(RND, far_bound, trade_type="S1"):
         RND, "P", put_action, [1 + far_bound, 2]
     )
 
-    trade_calls = get_trades_from_df(RND, far_call_mask)
-    trade_puts = get_trades_from_df(RND, far_put_mask)
+    trade_calls = get_trades_from_df(RND, far_call_mask, "C")
+    trade_puts = get_trades_from_df(RND, far_put_mask, "P")
     return trade_calls, trade_puts
 
 
@@ -249,8 +255,7 @@ def trade_results(possible_trades, n=None):
     trades_1 = possible_trades[1].iloc[-n:]
 
     result = trades_0.sum() + trades_1.sum()
-    K = trades_0.index.tolist() + trades_1.index.tolist()
-    return result, K
+    return result, trades_0.append(trades_1, ignore_index=True)
 
 
 def kurtosis_trade(RND, near_bound, far_bound, trade_type="K1"):
@@ -282,9 +287,71 @@ def kurtosis_trade(RND, near_bound, far_bound, trade_type="K1"):
         [1 + near_bound, 2],
     )
 
-    otm_call_trades = get_trades_from_df(RND, otm_call_mask)
-    atm_call_trades = get_trades_from_df(RND, atm_call_mask)
-    atm_put_trades = get_trades_from_df(RND, atm_put_mask)
-    otm_put_trades = get_trades_from_df(RND, otm_put_mask)
+    otm_call_trades = get_trades_from_df(RND, otm_call_mask, "C")
+    atm_call_trades = get_trades_from_df(RND, atm_call_mask, "C")
+    atm_put_trades = get_trades_from_df(RND, atm_put_mask, "P")
+    otm_put_trades = get_trades_from_df(RND, otm_put_mask, "P")
 
     return otm_call_trades, atm_call_trades, atm_put_trades, otm_put_trades
+
+
+def create_option_trade_table(RND, single_trades):
+    a = RND.data.groupby(by=["K", "option"]).mean().reset_index()
+    a["color"] = "r"
+    a.loc[a.option == "P", "color"] = "b"
+
+    if single_trades.shape[0] == 0:
+        trade_table = a
+        trade_table["traded"] = 0
+    else:
+        single_trades = single_trades[["K", "option"]]
+        single_trades["traded"] = 1
+        trade_table = a.merge(single_trades, on=["K", "option"], how="left")
+        trade_table = trade_table.replace(np.nan, 0)
+    return trade_table[
+        [
+            "K",
+            "M",
+            "q_M",
+            "S",
+            "ST",
+            "t0_payoff",
+            "T_payoff",
+            "total",
+            "color",
+            "traded",
+        ]
+    ]
+
+
+def save_trades_to_pickle(
+    data_path, day, tau_day, rnd, hd, kernel, M, trade_table
+):
+    data = {
+        "date": day,
+        "tau_day": tau_day,
+        "rnd": rnd,
+        "hd": hd,
+        "M": M,
+        "kernel": kernel,
+        "trade_table": trade_table,
+    }
+    with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "wb") as handle:
+        pickle.dump(data, handle)
+
+
+def load_trades_from_pickle(data_path, day, tau_day):
+    with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "rb") as handle:
+        data = pickle.load(handle)
+    return data
+
+
+def load_rnd_hd_from_pickle(data_path, day, tau_day):
+    with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "rb") as handle:
+        data = pickle.load(handle)
+
+    RND = data["RND"]
+    hd, rnd, M = data["hd"], data["rnd"], data["M"]
+    kernel = data["kernel"]
+    trade_table = {}
+    return RND, hd, rnd, kernel, M, trade_table
