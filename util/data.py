@@ -1,6 +1,3 @@
-import numpy as np
-import pandas as pd
-from datetime import datetime, timedelta
 from util.connect_db import connect_db, get_as_df
 
 
@@ -15,11 +12,7 @@ class RndDataClass:
         x = self.cutoff
         query = {"date": date_str}
         d = get_as_df(self.coll, query)
-        # print('Shape of raw data: ', d.shape)
-        # print('exclude values outside of {} - {} Moneyness - {}/{}'
-        #       .format(1-x, 1+x, sum(d.M > 1+x) + sum(d.M <= 1-x), d.shape[0]))
         df = d[(d.M <= 1 + x) & (d.M > 1 - x)]
-        # print('Shape of limited Moneyness data: ', df.shape)
         self.complete = df
 
     def analyse(self, date=None, sortby="date"):
@@ -58,7 +51,6 @@ class RndDataClass:
 
         df_tau = filtered_by_date[(filtered_by_date.tau_day == tau_day)]
         df_tau = df_tau.reset_index()
-        df_tau["M_std"] = (df_tau.M - np.mean(df_tau.M)) / np.std(df_tau.M)
         return df_tau
 
 
@@ -78,6 +70,8 @@ class HdDataClass:
         # yesterday = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
         # yesterday_str = str(yesterday.date())
 
-        S0 = self.complete.loc[self.complete.date_str == date, self.target].iloc[0]
+        S0 = self.complete.loc[
+            self.complete.date_str == date, self.target
+        ].iloc[0]
         df = self.complete[self.complete.date_str <= date]
         return df, S0

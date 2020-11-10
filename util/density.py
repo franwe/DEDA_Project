@@ -64,5 +64,14 @@ def pointwise_density_trafo_K2M(K, q_K, S_vals, M_vals):
 
     for i, m, s in zip(range(points), M_vals, S_vals):
         q_pointsM[i] = s / (m ** 2) * q_K(s / m)
-
     return q_pointsM
+
+
+def hd_rnd_domain(HD, RND, interval=[0.5, 1.5]):
+    _, HD_spline, _ = bspline(HD.M, HD.q_M, sections=15, degree=2)
+    _, RND_spline, _ = bspline(RND.M, RND.q_M, sections=15, degree=2)
+    M = np.linspace(interval[0], interval[1], 100)
+
+    hd = HD_spline(M)
+    rnd = RND_spline(M)
+    return hd, rnd, M

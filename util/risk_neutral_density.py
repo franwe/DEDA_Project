@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import norm
 
 from util.smoothing import local_polynomial, bspline
-from util.density import density_trafo_K2M, pointwise_density_trafo_K2M
+from util.density import pointwise_density_trafo_K2M
 
 
 def spd_appfinance(M, S, K, o, o1, o2, r, tau):
@@ -25,12 +25,14 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
     dd_d1_M = (
         -(1 / (M * o * st)) * (1 / M + o1 / o)
         + o2 * (st / 2 - (np.log(M) + rt) / (o ** 2 * st))
-        + o1 * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
+        + o1
+        * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
     )
     dd_d2_M = (
         -(1 / (M * o * st)) * (1 / M + o1 / o)
         - o2 * (st / 2 + (np.log(M) + rt) / (o ** 2 * st))
-        + o1 * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
+        + o1
+        * (2 * o1 * (np.log(M) + rt) / (o ** 3 * st) - 1 / (M * o ** 2 * st))
     )
 
     d_c_M = (
@@ -40,7 +42,9 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
     )
     dd_c_M = (
         norm.pdf(d1) * (dd_d1_M - d1 * (d_d1_M) ** 2)
-        - norm.pdf(d2) / (ert * M) * (dd_d2_M - 2 / M * d_d2_M - d2 * (d_d2_M) ** 2)
+        - norm.pdf(d2)
+        / (ert * M)
+        * (dd_d2_M - 2 / M * d_d2_M - d2 * (d_d2_M) ** 2)
         - 2 * norm.cdf(d2) / (ert * M ** 3)
     )
 
@@ -68,7 +72,7 @@ class RndCalculator:
         self.smile = None
         self.first = None
         self.second = None
-        self.f = None  #  might delete later
+        self.f = None  # might delete later
 
     def _h(self, h):
         if h is None:
@@ -76,18 +80,24 @@ class RndCalculator:
         else:
             return h
 
-    # ------------------------------------------------------------------ SPD NORMAL
+    # -------------------------------------------------------------- SPD NORMAL
     def fit_smile(self):
         X = np.array(self.data.M)
         Y = np.array(self.data.iv)
-        self.smile, self.first, self.second, self.M_smile, self.f = local_polynomial(
-            X, Y, self.h_iv
-        )
+        (
+            self.smile,
+            self.first,
+            self.second,
+            self.M_smile,
+            self.f,
+        ) = local_polynomial(X, Y, self.h_iv)
 
     def rookley(self):
         spd = spd_appfinance
-        # ---------------------------------------- B-SPLINE on SMILE, FIRST, SECOND
-        pars, spline, points = bspline(self.M_smile, self.smile, sections=8, degree=3)
+        # ------------------------------------ B-SPLINE on SMILE, FIRST, SECOND
+        pars, spline, points = bspline(
+            self.M_smile, self.smile, sections=8, degree=3
+        )
         # derivatives
         first_fct = spline.derivative(1)
         second_fct = spline.derivative(2)

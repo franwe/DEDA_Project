@@ -1,183 +1,219 @@
 import os
-from matplotlib import pyplot as plt
 from os.path import join
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
+import logging
+from copy import deepcopy
+import warnings
 
-from util.data import RndDataClass, HdDataClass
-from util.risk_neutral_density import RndCalculator
-from util.historical_density import HdCalculator
+warnings.filterwarnings("ignore")
+
+logging.basicConfig(filename="trading.log", level=logging.ERROR)
+
+from util.data import RndDataClass
+from util.general import create_dates, load_tau_section_parameters
+from util.trading import (
+    load_rnd_hd_from_pickle,
+    create_intervals,
+    add_action,
+    execute_options,
+    general_trading_payoffs,
+    skewness_trade,
+    kurtosis_trade,
+    trade_results,
+    create_option_trade_table,
+    save_trades_to_pickle,
+)
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
-save_data = join(cwd, "data", "02-3_rnd_hd") + os.sep
+save_data = join(cwd, "data", "03-1_trades") + os.sep
 save_plots = join(cwd, "plots") + os.sep
-garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
-
-# --------------------------------------------------------------------- 2D PLOT
-
-
-def get_densities(
-    RndData,
-    HdData,
-    day,
-    tau_day,
-    x,
-    y_lim=None,
-    reset_S=False,
-    overwrite=False,
-    h_densfit=0.2,
-):
-
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
-    hd_data, S0 = HdData.filter_data(day)
-    print(S0, day, tau_day)
-    if reset_S:
-        df_tau["S"] = S0
-        df_tau["M"] = df_tau.S / df_tau.K
-
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
-    RND.fit_smile()
-    RND.rookley()
-
-    HD = HdCalculator(
-        data=hd_data,
-        S0=S0,
-        path=garch_data,
-        tau_day=tau_day,
-        date=day,
-        n=400,
-        M=5000,
-        overwrite=overwrite,
-    )
-    HD.get_hd(variate=True)
-    return HD, RND
-
+density_data = join(cwd, "data", "02-3_rnd_hd") + os.sep
 
 # ----------------------------------------------------------- LOAD DATA HD, RND
 x = 0.5
-HdData = HdDataClass()
+n = 1  # None
+(
+    filename,
+    near_bound,
+    far_bound,
+    h,
+    tau_min,
+    tau_max,
+) = load_tau_section_parameters("big")
+df = pd.DataFrame()
 RndData = RndDataClass(cutoff=x)
-# TODO: Influence of coutoff?
+
+days = create_dates(start="2020-03-01", end="2020-09-30")
+for day in days:
+    taus = RndData.analyse(day)
+    for tau in taus:
+        found_trades = False
+        tau_day = tau["_id"]
+        if (tau_day > tau_min) & (tau_day <= tau_max):
+
+            try:
+                print(tau_day, day)
+                RND, hd, rnd, kernel, M, trade_table = load_rnd_hd_from_pickle(
+                    density_data, day, tau_day
+                )
+            except FileNotFoundError:
+                logging.info(day, tau_day, " ---- densities do not exist")
+                break
+
+            # ----------------------------------------- COMPARE HD RND - ACTION
+            buy = rnd < hd
+            intervals = create_intervals(buy, M)
+            RND = add_action(RND, intervals)
+
+            # ----------------------------------------- KERNEL DEVIATES FROM 1?
+            K_bound = 0.3
+            around_one = (kernel > 1 - K_bound) & (kernel < 1 + K_bound)
+            deviates_from_one_ratio = 1 - around_one.sum() / len(kernel)
+
+            try:
+                RND = execute_options(RND, day, tau_day)
+                RND = general_trading_payoffs(RND)
+            except KeyError:
+                logging.info(day, tau_day, " ---- Maturity not reached yet")
+
+                break
+
+            trades_list = []
+            trade_entry_blanc = {
+                "date": day,
+                "tau_day": tau_day,
+                "kernel": deviates_from_one_ratio,
+                "trade": "-",
+                "total": 0,
+                "t0_payoff": 0,
+                "T_payoff": 0,
+            }
+
+            for S_trade in ["S1", "S2"]:
+                try:
+                    trade_calls, trade_puts = skewness_trade(
+                        RND, far_bound, trade_type=S_trade
+                    )
+                    possible_trades = [trade_calls, trade_puts]
+                    result, single_trades = trade_results(possible_trades, n)
+
+                    trade_entry = deepcopy(trade_entry_blanc)
+                    trade_entry.update(
+                        {
+                            "trade": S_trade,
+                            "total": result.total,
+                            "t0_payoff": result.t0_payoff,
+                            "T_payoff": result.T_payoff,
+                        }
+                    )
+                    trades_list.append(trade_entry)
+                    trade_table.update(
+                        {
+                            S_trade: create_option_trade_table(
+                                RND, single_trades
+                            )
+                        }
+                    )
+
+                except ValueError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        S_trade,
+                        " ---- Trade can't be created",
+                    )
+
+                except AttributeError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        S_trade,
+                        " ---- Trade can't be created",
+                    )
+
+            for K_trade in ["K1", "K2"]:
+                try:
+                    (
+                        otm_call_trades,
+                        atm_call_trades,
+                        atm_put_trades,
+                        otm_put_trades,
+                    ) = kurtosis_trade(
+                        RND, near_bound, far_bound, trade_type=K_trade
+                    )
+                    atm_trades = [atm_call_trades, atm_put_trades]
+                    otm_trades = [otm_call_trades, otm_put_trades]
+
+                    atm_result, single_atm_trades = trade_results(
+                        atm_trades, n
+                    )
+                    otm_result, single_otm_trades = trade_results(
+                        otm_trades, n
+                    )
+                    single_trades = single_atm_trades.append(
+                        single_otm_trades, ignore_index=True
+                    )
+
+                    if (otm_result is None) or (atm_result is None):
+                        pass
+                    else:
+                        result = otm_result + atm_result
+                        trade_entry = deepcopy(trade_entry_blanc)
+                        trade_entry.update(
+                            {
+                                "trade": K_trade,
+                                "total": result.total,
+                                "t0_payoff": result.t0_payoff,
+                                "T_payoff": result.T_payoff,
+                            }
+                        )
+                        trades_list.append(trade_entry)
+                        trade_table.update(
+                            {
+                                K_trade: create_option_trade_table(
+                                    RND, single_trades
+                                )
+                            }
+                        )
+
+                except ValueError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        K_trade,
+                        " ---- Trade can't be created",
+                    )
+
+                except AttributeError:
+                    logging.info(
+                        day,
+                        tau_day,
+                        K_trade,
+                        " ---- Trade can't be created",
+                    )
+
+            if len(trades_list) > 0:
+                df = df.append(trades_list, ignore_index=True)
+                print(
+                    day,
+                    tau_day,
+                    "-------",
+                    pd.DataFrame(trades_list).trade.tolist(),
+                )
+
+            else:
+                df = df.append([trade_entry_blanc], ignore_index=True)
+                trade_table.update(
+                    {"-": create_option_trade_table(RND, pd.DataFrame())}
+                )
+                print(day, tau_day, "------- ----------")
+
+            save_trades_to_pickle(
+                save_data, day, tau_day, rnd, hd, kernel, M, trade_table
+            )
 
 
-day = "2020-04-18"
-tau_day = 41
-
-HD, RND = get_densities(
-    RndData,
-    HdData,
-    day,
-    tau_day,
-    x=x,
-    reset_S=True,  # to build +/- Moneyness pairs (0.8, 1.2)
-    overwrite=False,
-    h_densfit=0.15,
-)
-
-from util.smoothing import bspline
-
-_, HD_spline, _ = bspline(HD.M, HD.q_M, sections=15, degree=2)
-_, RND_spline, _ = bspline(RND.M, RND.q_M, sections=15, degree=2)
-M = np.linspace(min(min(RND.M), min(HD.M)), max(max(RND.M), max(HD.M)), 100)
-
-hd = HD_spline(M)
-rnd = RND_spline(M)
-
-fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-# --------------------------------------------------- Moneyness - Moneyness
-
-ax.plot(HD.M, HD.q_M, "b")
-ax.plot(RND.M, RND.q_M, "r")
-ax.plot(M, hd, "b", ls=":")
-ax.plot(M, rnd, "r", ls=":")
-ax.text(
-    0.99,
-    0.99,
-    str(day) + "\n" + r"$\tau$ = " + str(tau_day),
-    horizontalalignment="right",
-    verticalalignment="top",
-    transform=ax.transAxes,
-)
-ax.set_xlim((1 - x), (1 + x))
-plt.show()
-
-
-def create_intervals(sequence):
-    last = sequence[0]
-    intervals = []
-    this_interval = [last, 0]
-    for i, tf in enumerate(sequence):
-        if tf == last:
-            pass
-        else:
-            this_interval.append(i - 1)
-            intervals.append(this_interval)
-            # set up new interval
-            last = tf
-            this_interval = [last, i]
-    this_interval.append(i)
-    intervals.append(this_interval)
-    return intervals
-
-
-def add_action(RND, intervals):
-    """add a column with trader's action to the RND dataframe
-
-    Args:
-        RND (class): RND class with object RND.data dataframe
-        intervals (list): list of intervals with [bool, start_idx, end_idx]
-                          True: 'buy', False: 'sell'
-        M (array): array of moneyness values, belonging to start_idx/end_idx
-
-    Returns:
-        class: RND class with new column RND.data.action 'buy'/'sell'
-    """
-    RND.data["action"] = None
-    for interval in intervals:
-        tf, start, end = interval
-        mask = (RND.data.M >= M[start]) & (RND.data.M < M[end])
-        if tf == True:
-            RND.data.loc[mask, "action"] = "buy"
-        elif tf == False:
-            RND.data.loc[mask, "action"] = "sell"
-    return RND
-
-
-buy = rnd < hd
-intervals = create_intervals(buy)
-RND = add_action(RND, intervals)
-
-cols = ["M", "K", "S", "P", "P_BTC", "action", "option"]
-RND.data[cols]
-mask = (RND.data.option == "C") & (RND.data.action == "buy")
-a = RND.data[mask][cols]
-a.groupby(by="K").count()
-
-eval_day = datetime.strptime(day, "%Y-%m-%d") + timedelta(days=tau_day)
-str(eval_day.date())
-
-from util.connect_db import connect_db, get_as_df
-
-db = connect_db()
-
-coll = db["BTCUSD_deribit"]
-query = {"date_str": str(eval_day.date())}
-ST = get_as_df(coll, query)["price"].iloc[0]
-
-
-def get_payoff(K, ST, option):
-    if option == "C":
-        return max(ST - K, 0)
-    elif option == "P":
-        return max(K - ST, 0)
-
-
-RND.data["opt_payoff"] = RND.data.apply(
-    lambda row: get_payoff(row.K, ST, row.option), axis=1
-)
-
-RND.data[cols + ["opt_payoff"]]
-
-a = 1
+df[
+    ["date", "tau_day", "total", "t0_payoff", "T_payoff", "trade", "kernel"]
+].to_csv(save_data + filename, index=False)
