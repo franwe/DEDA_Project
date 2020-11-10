@@ -70,8 +70,6 @@ class HdDataClass:
         # yesterday = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
         # yesterday_str = str(yesterday.date())
 
-        S0 = self.complete.loc[
-            self.complete.date_str == date, self.target
-        ].iloc[0]
+        S0 = self.complete.loc[self.complete.date_str == date, "price"].iloc[0]
         df = self.complete[self.complete.date_str <= date]
         return df, S0

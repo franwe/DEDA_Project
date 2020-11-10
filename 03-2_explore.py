@@ -16,7 +16,6 @@ trade_data_directory = join(cwd, "data", "03-1_trades") + os.sep
 
 df = pd.read_csv(trade_data_directory + "trades_02.csv")
 df["id"] = range(0, df.shape[0])
-# df.tau_day = df.tau_day.astype(float)
 df.set_index("id", inplace=True, drop=False)
 
 
@@ -64,16 +63,13 @@ app.layout = html.Div(
                 for i in df.columns
             ],
             data=df.to_dict("records"),
-            # editable=True,
             filter_action="custom",
             filter_query="",
             sort_action="native",
             sort_mode="multi",
-            # column_selectable="single",
             hidden_columns=["id", "Unnamed: 0"],
             row_selectable="single",
             row_deletable=False,
-            # selected_columns=[],
             selected_rows=[],
             page_action="native",
             page_current=0,
@@ -89,16 +85,9 @@ app.layout = html.Div(
             ],
             data=df.to_dict("records"),
             editable=False,
-            # filter_action="custom",
-            # filter_query="",
             sort_action="native",
             sort_mode="multi",
-            # column_selectable="single",
-            # hidden_columns=["id", "Unnamed: 0"],
-            # row_selectable="single",
             row_deletable=False,
-            # selected_columns=[],
-            # selected_rows=[],
             page_action="native",
             page_current=0,
             page_size=10,
@@ -271,15 +260,9 @@ def update_plot(row_ids, selected_row_ids, active_cell):
     tau_day = int(df.loc[i, "tau_day"])
     trade_type = df.loc[i, "trade"]
 
-    # fig = plot_trades(data, trade_type)
     fig = plotly_plot(trade_data_directory, day, tau_day, trade_type)
     return fig
 
 
 if __name__ == "__main__":
     app.run_server(debug=True)
-
-
-# from IPython.display import Image
-# img_bytes = fig.to_image(format="png", width=600, height=350, scale=2)
-# Image(img_bytes)
