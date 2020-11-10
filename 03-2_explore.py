@@ -7,26 +7,16 @@ import pandas as pd
 import os
 from os.path import join
 
-import flask
-import glob
-
 from util.plotly import plotly_plot
-
-
-external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
 trade_data_directory = join(cwd, "data", "03-1_trades") + os.sep
-image_directory = join(cwd, "plots") + os.sep
-static_image_route = "/static/"
-list_of_images = [
-    os.path.basename(x) for x in glob.glob("{}*.png".format(image_directory))
-]
 
 
-df = pd.read_csv(trade_data_directory + "trades_smallTau.csv")
+df = pd.read_csv(trade_data_directory + "trades_02.csv")
 df["id"] = range(0, df.shape[0])
+# df.tau_day = df.tau_day.astype(float)
 df.set_index("id", inplace=True, drop=False)
 
 
@@ -59,8 +49,7 @@ def evaluate(dff):
 
 df_evaluate = pd.DataFrame(evaluate(df))
 
-# app = dash.Dash(__name__)
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app = dash.Dash(__name__)
 
 styles = {"pre": {"border": "thin lightgrey solid", "overflowX": "scroll"}}
 application = app.server
@@ -68,7 +57,6 @@ application = app.server
 app.layout = html.Div(
     [
         dcc.Graph(id="plot"),
-        dcc.Markdown(""" ## Trades Table """),
         dash_table.DataTable(
             id="datatable-row-ids",
             columns=[
@@ -76,20 +64,21 @@ app.layout = html.Div(
                 for i in df.columns
             ],
             data=df.to_dict("records"),
-            editable=True,
+            # editable=True,
             filter_action="custom",
             filter_query="",
             sort_action="native",
             sort_mode="multi",
-            column_selectable="single",
+            # column_selectable="single",
             hidden_columns=["id", "Unnamed: 0"],
             row_selectable="single",
             row_deletable=False,
-            selected_columns=[],
+            # selected_columns=[],
             selected_rows=[],
             page_action="native",
             page_current=0,
             page_size=10,
+            css=[{"selector": ".show-hide", "rule": "display: none"}],
         ),
         dcc.Markdown(""" ## Aggregation Table """),
         dash_table.DataTable(

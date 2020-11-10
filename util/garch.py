@@ -215,10 +215,12 @@ class GARCH:
         return all_summed_returns, all_tau_mu
 
     def plot_params(self, pars, bounds, CI=False):
-        fig_pars, axes = plt.subplots(4, 1, figsize=(8, 6))
-
-        for i, name in zip(range(0, 4), ["mu", "omega", "alpha", "beta"]):
-            axes[i].plot(pars[:, i], label="arch.arch_model", c="b")
+        fig_pars, axes = plt.subplots(4, 1, figsize=(5, 4), sharex=True)
+        fig_pars.subplots_adjust(hspace=0)
+        for i, name in zip(
+            range(0, 4), [r"$\mu$", r"$\omega$", r"$\alpha$", r"$\beta$"]
+        ):
+            axes[i].plot(pars[:, i], c="b")
             if CI:
                 axes[i].plot(
                     range(0, len(pars)),
@@ -234,5 +236,5 @@ class GARCH:
                     c="b",
                 )
             axes[i].set_ylabel(name)
-        axes[0].legend()
+        plt.tight_layout()
         return fig_pars
