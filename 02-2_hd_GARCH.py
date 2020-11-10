@@ -24,13 +24,16 @@ M = 5000  # 5000
 
 def create_dates(start, end):
     dates = pd.date_range(
-        start, end, closed="right", freq=pd.offsets.WeekOfMonth(week=1, weekday=2)
+        start,
+        end,
+        closed="right",
+        freq=pd.offsets.WeekOfMonth(week=1, weekday=2),
     )
     return [str(date.date()) for date in dates]
 
 
 days = create_dates(start="2019-09-01", end="2020-10-01")
-taus = [7] * len(days)
+taus = [42] * len(days)
 
 color = cm.rainbow(np.linspace(0, 1, len(days)))
 x_pos, y_pos = 0.99, 0.99
