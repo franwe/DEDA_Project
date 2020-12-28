@@ -5,7 +5,6 @@ import pandas as pd
 from os.path import join
 from matplotlib.pyplot import cm
 
-from util.density import integrate
 from util.data import HdDataClass, RndDataClass
 from util.historical_density import HdCalculator
 

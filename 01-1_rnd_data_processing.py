@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 
 from util.data_processing import data_processing
 from util.connect_db import connect_db, get_as_df, write_in_db, bulk_write
@@ -28,7 +28,10 @@ for start in dates:
     end_ts = int(datetime.timestamp(end) * 1000)
 
     query = {
-        "$and": [{"timestamp": {"$gte": start_ts}}, {"timestamp": {"$lte": end_ts}}]
+        "$and": [
+            {"timestamp": {"$gte": start_ts}},
+            {"timestamp": {"$lte": end_ts}},
+        ]
     }
     df_all = get_as_df(collection, query)
 
@@ -60,7 +63,9 @@ for start in dates:
         coll = db["BTCUSD"]
         columns = ["index_price", "datetime", "date", "time"]
         S = df_all.groupby(by=columns).count().reset_index()[columns]
-        S["_id"] = S.apply(lambda row: str(row.date) + "_" + str(row.time), axis=1)
+        S["_id"] = S.apply(
+            lambda row: str(row.date) + "_" + str(row.time), axis=1
+        )
         S = S.sort_values(by="_id").reset_index()[["_id"] + columns]
         S["date"] = S.date.apply(lambda dt: str(dt))
         bulk_write(coll=coll, df=S, ordered=False)

@@ -1,14 +1,10 @@
 import os
 from matplotlib import pyplot as plt
-import numpy as np
-from os.path import isfile, join
-import matplotlib
+from os.path import join
 
 from util.data import RndDataClass, HdDataClass
 from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
-from util.density import integrate
-from util.data import HdDataClass, RndDataClass
 
 cwd = os.getcwd() + os.sep
 source_data = join(cwd, "data", "00-raw") + os.sep
@@ -60,7 +56,7 @@ plt.plot(RND.M, RND.q_M)
 plt.vlines(1, 0, 3.5)
 plt.show()
 
-from util.density import integrate
+# from util.density import integrate
 
-integrate(RND.M, RND.q_M)
-integrate(RND.K, RND.q_K)
+# integrate(RND.M, RND.q_M)
+# integrate(RND.K, RND.q_K)
