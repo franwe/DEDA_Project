@@ -54,7 +54,7 @@ class HdCalculator(GARCH):
         S_T = self.S0 * np.exp(all_summed_returns / 100 + all_tau_mu / 100)
         return S_T
 
-    def get_hd(self, variate):
+    def get_hd(self, variate=True):
         self.filename = "T-{}_{}_Ksim.csv".format(self.tau_day, self.date)
         # simulate M paths
         if os.path.exists(self.path + self.filename) and (

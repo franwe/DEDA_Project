@@ -134,3 +134,27 @@ class RndCalculator:
         self.q_M, first, second, self.M, f = local_polynomial(
             X, Q, h=self.h_densfit * np.mean(X), kernel="epak"
         )
+
+    def calc_deriv(self, option):
+        df = self.data[self.data.option == option]
+        fit, first, second, K_domain, f = local_polynomial(df.K, df.P, h=1500)
+        return K_domain, second
+
+    def d2C_dK2(self):
+        C_domain, C2 = self.calc_deriv(option="C")
+        P_domain, P2 = self.calc_deriv(option="P")
+        fit, first, second, K_domain, f = local_polynomial(
+            np.append(C_domain, P_domain), np.append(C2, P2), h=1500
+        )
+        from matplotlib import pyplot as plt
+
+        plt.plot(C_domain, C2)
+        plt.plot(P_domain, P2)
+        plt.plot(K_domain, fit)
+        plt.show()
+        S0 = self.data.S[0]
+        self.M_num = S0 / K_domain
+
+        self.q_M_num = pointwise_density_trafo_K2M(
+            K_domain, fit, np.ones(100) * S0, self.M_num
+        )
