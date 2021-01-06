@@ -1,8 +1,20 @@
 import numpy as np
 from scipy.stats import norm
 
-from util.smoothing import local_polynomial, bspline
+from util.smoothing import (
+    create_fit,
+    bandwidth_cv,
+    bspline,
+    local_polynomial_estimation,
+    linear_estimation,
+)
 from util.density import pointwise_density_trafo_K2M
+
+
+def create_bandwidth_range(X, bins_max=60):
+    X_range = X.max() - X.min()
+    x_bandwidth = np.linspace(X_range / bins_max, X_range / 5, num=50)
+    return x_bandwidth
 
 
 def spd_appfinance(M, S, K, o, o1, o2, r, tau):
@@ -59,9 +71,9 @@ class RndCalculator:
         self.data = data
         self.tau_day = tau_day
         self.date = date
-        self.h_iv = self._h(h_iv)
+        self.h_m = None
+        self.h_k = None
         self.r = 0
-        self.h_densfit = self._h(h_densfit)
 
         self.tau = self.data.tau.iloc[0]
         self.K = None
@@ -72,25 +84,16 @@ class RndCalculator:
         self.smile = None
         self.first = None
         self.second = None
-        self.f = None  # might delete later
-
-    def _h(self, h):
-        if h is None:
-            return self.data.shape[0] ** (-1 / 9)  # TODO: rethink this!
-        else:
-            return h
 
     # -------------------------------------------------------------- SPD NORMAL
-    def fit_smile(self):
-        X = np.array(self.data.M)
-        Y = np.array(self.data.iv)
-        (
-            self.smile,
-            self.first,
-            self.second,
-            self.M_smile,
-            self.f,
-        ) = local_polynomial(X, Y, self.h_iv)
+    def bandwidth_and_fit(self, X, y):
+        x_bandwidth = create_bandwidth_range(X)
+        cv = bandwidth_cv(
+            X, y, x_bandwidth, smoothing=local_polynomial_estimation
+        )
+        h = x_bandwidth[cv.argmin()]
+        fit, first, second, X_domain = create_fit(X, y, h)
+        return (h, x_bandwidth, cv), (fit, first, second, X_domain)
 
     def rookley(self):
         spd = spd_appfinance
@@ -102,6 +105,7 @@ class RndCalculator:
         first_fct = spline.derivative(1)
         second_fct = spline.derivative(2)
 
+        # step 1: calculate spd for every option-point "Rookley's method"
         self.data["q"] = self.data.apply(
             lambda row: spd(
                 row.M,
@@ -116,24 +120,30 @@ class RndCalculator:
             axis=1,
         )
 
-        # step 1: Rookley results (points in K-domain) - fit density curve
+        # step 2: Rookley results (points in K-domain) - fit density curve
         X = np.array(self.data.K)
-        Q = np.array(self.data.q)
-        self.q_K, first, second, self.K, f = local_polynomial(
-            X, Q, h=self.h_densfit * np.mean(X), kernel="epak"
-        )
+        y = np.array(self.data.q)
 
-        # step 2: transform density POINTS from K- to M-domain
+        res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
+        self.h_k = res_bandwidth[0]
+        (
+            self.q_K,
+            _first,
+            _second,
+            self.K,
+        ) = res_fit
+
+        # step 3: transform density POINTS from K- to M-domain
         self.data["q_M"] = pointwise_density_trafo_K2M(
             self.K, self.q_K, self.data.S, self.data.M
         )
 
-        # step 3: density points in M-domain - fit density curve
+        # step 4: density points in M-domain - fit density curve
         X = np.array(self.data.M)
-        Q = np.array(self.data.q_M)
-        self.q_M, first, second, self.M, f = local_polynomial(
-            X, Q, h=self.h_densfit * np.mean(X), kernel="epak"
-        )
+        y = np.array(self.data.q_M)
+
+        self.q_M, first, second, self.M = create_fit(X, y, self.h_m)
+        return
 
     def calc_deriv(self, option):
         df = self.data[self.data.option == option]

@@ -1,8 +1,25 @@
 import numpy as np
 from scipy.stats import norm
+import scipy.interpolate as interpolate  # B-Spline
+from sklearn.neighbors import KernelDensity
 
-# B-Spline
-import scipy.interpolate as interpolate
+
+def density_estimation(sample, S, h, kernel="epanechnikov"):
+    """
+    Kernel Density Estimation for domain S, based on sample
+    ------- :
+    sample  : observed sample which density will be calculated
+    S       : domain for which to calculate the sample for
+    h       : bandwidth for KDE
+    kernel  : kernel for KDE
+    ------- :
+    return  : density
+    """
+    kde = KernelDensity(kernel=kernel, bandwidth=h).fit(sample.reshape(-1, 1))
+    log_dens = kde.score_samples(S.reshape(-1, 1))
+    density = np.exp(log_dens)
+    return density
+
 
 # ----------------- with tau ------- Rookley + Haerdle (Applied Quant. Finance)
 def gaussian_kernel(x, Xi, h):
@@ -17,59 +34,95 @@ def epanechnikov(x, Xi, h):
     return k * indicator
 
 
-def smoothing_rookley(X, Y, x, h, kernel=gaussian_kernel):
+def local_polynomial_estimation(X, y, x, h, kernel):
     n = X.shape[0]
+    K_i = 1 / h * kernel(x, X, h)
+    f_i = 1 / n * sum(K_i)
+
+    if f_i == 0:  # doesnt really happen, but in order to avoid possible errors
+        W_hi = np.zeros(n)
+    else:
+        W_hi = K_i / f_i
 
     X1 = np.ones(n)
     X2 = X - x
-    X3 = (X - x) ** 2
-    X_matrix = np.array([X1, X2, X3]).T
+    X3 = (
+        X2 ** 2
+    )  # todo: really? 1/2: compare to taylor: yes, but not in books - linear scaling does not matter for dependcen
 
-    K_hn = 1 / h * kernel(X, x, h)
-    f_hn = 1 / n * sum(K_hn)
-    if f_hn == 0:
-        W_hn = np.zeros(n)
+    X = np.array([X1, X2, X3]).T
+    W = np.diag(W_hi)  # (n,n)
+
+    XTW = (X.T).dot(W)  # (3,n)
+    XTWX = XTW.dot(X)  # (3,3)
+    XTWy = XTW.dot(y)  # (3,1)
+
+    beta = np.linalg.pinv(XTWX).dot(XTWy)  # (3,1)
+    return beta[0], beta[1], beta[2], W_hi
+
+
+def linear_estimation(X, y, x, h, kernel):
+    n = X.shape[0]
+
+    K_i = 1 / h * kernel(x, X, h)
+
+    f_i = 1 / n * sum(K_i)
+
+    if f_i == 0:
+        W_hi = np.zeros(n)
     else:
-        W_hn = K_hn / f_hn
-    W = np.diag(W_hn)
-    XTW = np.dot(X_matrix.T, W)
+        W_hi = K_i / f_i
 
-    beta = np.linalg.pinv(np.dot(XTW, X_matrix)).dot(XTW).dot(Y)
-
-    return beta[0], beta[1], 2 * beta[2], f_hn
+    y_pred = 1 / n * W_hi.dot(y)
+    return y_pred, 0, 0, W_hi
 
 
-def local_polynomial(X, Y, h, gridsize=100, kernel="epak"):
+def bandwidth_cv(
+    X,
+    y,
+    x_bandwidth,
+    smoothing=local_polynomial_estimation,
+    kernel=gaussian_kernel,
+):
+    n = X.shape[0]
+    num = len(x_bandwidth)
+    cv = np.zeros(num)
+    for b, h in enumerate(x_bandwidth):
+        sqrt_err = np.zeros(X.shape[0])
+        for i, (x_test, y_test) in enumerate(zip(X, y)):
+            X_temp, Y_temp = np.delete(X, i), np.delete(y, i)
+            y_pred = smoothing(X_temp, Y_temp, x_test, h, kernel)[0]
+            sqrt_err[i] = (y_test - y_pred) ** 2
+        cv[b] = 1 / n * sum(sqrt_err)
+    return cv
 
-    if kernel == "epak":
-        kernel = epanechnikov
-    elif kernel == "gauss":
-        kernel = gaussian_kernel
-    else:
-        print("kernel not know, use epanechnikov")
-        kernel = epanechnikov
 
-    X_domain = np.linspace(min(X), max(X), gridsize)
-
-    sig = np.zeros((gridsize, 4))
+def create_fit(
+    X,
+    y,
+    h,
+    gridsize=100,
+    smoothing=local_polynomial_estimation,
+    kernel=gaussian_kernel,
+):
+    X_domain = np.linspace(X.min(), X.max(), gridsize)
+    fit = np.zeros(len(X_domain))
+    first = np.zeros(len(X_domain))
+    second = np.zeros(len(X_domain))
     for i, x in enumerate(X_domain):
-        sig[i] = smoothing_rookley(X, Y, x, h, kernel)
-
-    fit = sig[:, 0]
-    first = sig[:, 1]
-    second = sig[:, 2]
-    f = sig[:, 3]
-
-    # S_min, S_max = min(df.S), max(df.S)
-    # K_min, K_max = min(df.K), max(df.K)
-    # S = np.linspace(S_min, S_max, gridsize)
-    # K = np.linspace(K_min, K_max, gridsize)
-
-    return fit, first, second, X_domain, f
+        b0, b1, b2, W_hi = smoothing(X, y, x, h, kernel)
+        fit[i] = b0
+        first[i] = b1
+        second[i] = b2
+    return fit, first, second, X_domain
 
 
 def bspline(x, y, sections, degree=3):
-    idx = np.linspace(0, len(x) - 1, sections + 1, endpoint=True).round(0).astype("int")
+    idx = (
+        np.linspace(0, len(x) - 1, sections + 1, endpoint=True)
+        .round(0)
+        .astype("int")
+    )
     x = x[idx]
     y = y[idx]
 
@@ -81,7 +134,7 @@ def bspline(x, y, sections, degree=3):
 
 
 #
-# # ------------------------------------------------------------------------ MAIN
+# # ---------------------------------------------------------------------- MAIN
 # import os
 # from matplotlib import pyplot as plt
 # from util.data import RndDataClass, HdDataClass
