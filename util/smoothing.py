@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import norm
 import scipy.interpolate as interpolate  # B-Spline
 from sklearn.neighbors import KernelDensity
+from matplotlib import pyplot as plt
 
 
 def density_estimation(sample, S, h, kernel="epanechnikov"):
@@ -46,9 +47,7 @@ def local_polynomial_estimation(X, y, x, h, kernel):
 
     X1 = np.ones(n)
     X2 = X - x
-    X3 = (
-        X2 ** 2
-    )  # todo: really? 1/2: compare to taylor: yes, but not in books - linear scaling does not matter for dependcen
+    X3 = X2 ** 2
 
     X = np.array([X1, X2, X3]).T
     W = np.diag(W_hi)  # (n,n)
@@ -115,6 +114,48 @@ def create_fit(
         first[i] = b1
         second[i] = b2
     return fit, first, second, X_domain
+
+
+def plot_locpoly_weights(X, y, x_points, h1, h2, kernel=gaussian_kernel):
+    import pandas as pd
+
+    # this plot shows how the weights have different width for sparser data
+
+    # ugly way to sort the values according to X (Moneyness)
+    df = pd.DataFrame(data=y, index=X)
+    df = df.sort_index()
+    X = np.array(df.index)
+    y = np.array(df[0])
+
+    fig, (ax0, ax1) = plt.subplots(
+        2, 1, sharex=True, gridspec_kw={"height_ratios": [4, 1]}
+    )
+    # density points
+    y_density = np.zeros(X.shape[0])
+    for i, x in enumerate(X):
+        y_density[i] = np.random.uniform(0, 1)
+
+    ax1.scatter(X, y_density, c="k", alpha=0.5)
+    ax1.tick_params(
+        axis="y",  # changes apply to the y-axis
+        which="both",  # both major and minor ticks are affected
+        left=False,  # ticks along the bottom edge are off
+        right=False,  # ticks along the top edge are off
+        labelleft=False,  # labels along the bottom edge are off)
+    )
+
+    # weights
+    for x, c in zip(x_points, ["#1f77b4", "#ff7f0e", "#2ca02c"]):
+        b0, b1, b2, W_hi = local_polynomial_estimation(
+            X, y, x, h1, kernel=kernel
+        )
+        b0, b1, b2, W_h = local_polynomial_estimation(
+            X, y, x, h2, kernel=kernel
+        )
+        ax0.plot(X, W_hi, c=c)
+        ax0.plot(X, W_h, ls=":", c=c)
+
+    return fig
 
 
 def bspline(x, y, sections, degree=3):
