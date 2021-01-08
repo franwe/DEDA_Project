@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.stats import norm
+from matplotlib import pyplot as plt
 
 from util.smoothing import (
     create_fit,
@@ -141,26 +142,44 @@ class RndCalculator:
         # step 4: density points in M-domain - fit density curve
         X = np.array(self.data.M)
         y = np.array(self.data.q_M)
+        res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
+        self.h_m2 = res_bandwidth[0] * 1.5
+        (
+            self.q_M,
+            _first,
+            _second,
+            self.M,
+        ) = create_fit(X, y, self.h_m2)
 
-        self.q_M, first, second, self.M = create_fit(X, y, self.h_m)
         return
 
     def calc_deriv(self, option):
         df = self.data[self.data.option == option]
-        fit, first, second, K_domain, f = local_polynomial(df.K, df.P, h=1500)
+        X = np.array(df.K)
+        y = np.array(df.P)
+
+        res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
+        h = res_bandwidth[0]
+
+        fit, first, second, K_domain = create_fit(X, y, h)
+
         return K_domain, second
 
     def d2C_dK2(self):
         C_domain, C2 = self.calc_deriv(option="C")
-        P_domain, P2 = self.calc_deriv(option="P")
-        fit, first, second, K_domain, f = local_polynomial(
-            np.append(C_domain, P_domain), np.append(C2, P2), h=1500
-        )
+        P_domain, P2 = self.calc_deriv(
+            option="P"
+        )  # TOdO: puts give wave-result. somehow need smoother fit of prices. or S0=True?
+        X = np.append(C_domain, P_domain)
+        y = np.append(C2, P2)
+        res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
+        fit, first, second, K_domain = res_fit
+
         from matplotlib import pyplot as plt
 
-        plt.plot(C_domain, C2)
-        plt.plot(P_domain, P2)
-        plt.plot(K_domain, fit)
+        plt.plot(C_domain, C2, ls=":")
+        plt.plot(P_domain, P2, ls=":")
+        plt.plot(K_domain, fit, "k")
         plt.show()
         S0 = self.data.S[0]
         self.M_num = S0 / K_domain
@@ -168,3 +187,26 @@ class RndCalculator:
         self.q_M_num = pointwise_density_trafo_K2M(
             K_domain, fit, np.ones(100) * S0, self.M_num
         )
+
+
+def plot_rookleyMethod(RND):
+    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 4))
+
+    # smile
+    ax0.scatter(RND.data.M, RND.data.iv, c="r", s=4)
+    ax0.plot(RND.M_smile, RND.smile)
+    ax0.set_xlabel("Moneyness")
+    ax0.set_ylabel("implied volatility")
+
+    # derivatives
+    ax1.plot(RND.M_smile, RND.smile)
+    ax1.plot(RND.M_smile, RND.first)
+    ax1.plot(RND.M_smile, RND.second)
+    ax1.set_xlabel("Moneyness")
+
+    # density
+    ax2.scatter(RND.data.M, RND.data.q_M, c="r", s=4)
+    ax2.plot(RND.M, RND.q_M)
+    ax2.set_xlabel("Moneyness")
+    ax2.set_ylabel("risk neutral density")
+    return fig

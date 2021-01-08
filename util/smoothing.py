@@ -143,6 +143,7 @@ def plot_locpoly_weights(X, y, x_points, h1, h2, kernel=gaussian_kernel):
         right=False,  # ticks along the top edge are off
         labelleft=False,  # labels along the bottom edge are off)
     )
+    ax1.set_xlabel("Moneyness")
 
     # weights
     for x, c in zip(x_points, ["#1f77b4", "#ff7f0e", "#2ca02c"]):
@@ -154,6 +155,7 @@ def plot_locpoly_weights(X, y, x_points, h1, h2, kernel=gaussian_kernel):
         )
         ax0.plot(X, W_hi, c=c)
         ax0.plot(X, W_h, ls=":", c=c)
+        # print(sum(W_hi), sum(W_h))
 
     return fig
 
