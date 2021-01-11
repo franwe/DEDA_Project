@@ -2,7 +2,7 @@ from util.connect_db import connect_db, get_as_df
 
 
 class RndDataClass:
-    def __init__(self, cutoff=0.5):
+    def __init__(self, cutoff):
         self.coll = connect_db()["trades_clean"]
         self.cutoff = cutoff
 
@@ -13,6 +13,7 @@ class RndDataClass:
         query = {"date": date_str}
         d = get_as_df(self.coll, query)
         df = d[(d.M <= 1 + x) & (d.M > 1 - x)]
+        df = df[(df.iv > 0.01)]
         self.complete = df
 
     def analyse(self, date=None, sortby="date"):
@@ -41,7 +42,7 @@ class RndDataClass:
         """
         self.unique = self.complete.drop_duplicates()
 
-    def filter_data(self, date, tau_day, mode="complete"):
+    def filter_data(self, date, tau_day, mode="unique"):
         self.load_data(date)
         if mode == "complete":
             filtered_by_date = self.complete
