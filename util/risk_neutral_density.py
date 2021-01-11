@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.stats import norm
 from matplotlib import pyplot as plt
-
 from util.smoothing import (
     create_fit,
     bandwidth_cv,
@@ -10,11 +9,13 @@ from util.smoothing import (
     linear_estimation,
 )
 from util.density import pointwise_density_trafo_K2M
+from statsmodels.nonparametric.bandwidths import bw_silverman
 
 
-def create_bandwidth_range(X, bins_max=60):
-    X_range = X.max() - X.min()
-    x_bandwidth = np.linspace(X_range / bins_max, X_range / 5, num=50)
+def create_bandwidth_range(X, bins_max=30, num=10):
+    bw_silver = bw_silverman(X)
+    x_bandwidth = np.linspace(0.5 * bw_silver, 4 * bw_silver, num)
+    print("------ Silverman: ", bw_silver)
     return x_bandwidth
 
 
@@ -89,16 +90,18 @@ class RndCalculator:
     # -------------------------------------------------------------- SPD NORMAL
     def bandwidth_and_fit(self, X, y):
         x_bandwidth = create_bandwidth_range(X)
-        cv = bandwidth_cv(
+        cv_results = bandwidth_cv(
             X, y, x_bandwidth, smoothing=local_polynomial_estimation
-        )
-        h = x_bandwidth[cv.argmin()]
+        )[0]
+        cv = cv_results[1]
+        h = cv_results[2]
         fit, first, second, X_domain = create_fit(X, y, h)
         return (h, x_bandwidth, cv), (fit, first, second, X_domain)
 
     def rookley(self):
         spd = spd_appfinance
         # ------------------------------------ B-SPLINE on SMILE, FIRST, SECOND
+        print("fit bspline to derivatives for rookley method")
         pars, spline, points = bspline(
             self.M_smile, self.smile, sections=8, degree=3
         )
@@ -107,6 +110,7 @@ class RndCalculator:
         second_fct = spline.derivative(2)
 
         # step 1: calculate spd for every option-point "Rookley's method"
+        print("calculate q_K (Rookley Method)")
         self.data["q"] = self.data.apply(
             lambda row: spd(
                 row.M,
@@ -122,6 +126,7 @@ class RndCalculator:
         )
 
         # step 2: Rookley results (points in K-domain) - fit density curve
+        print("locpoly fit to rookley result q_K")
         X = np.array(self.data.K)
         y = np.array(self.data.q)
 
@@ -135,15 +140,17 @@ class RndCalculator:
         ) = res_fit
 
         # step 3: transform density POINTS from K- to M-domain
+        print("density transform rookley points q_K to q_M")
         self.data["q_M"] = pointwise_density_trafo_K2M(
             self.K, self.q_K, self.data.S, self.data.M
         )
 
         # step 4: density points in M-domain - fit density curve
+        print("locpoly fit to q_M")
         X = np.array(self.data.M)
         y = np.array(self.data.q_M)
         res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
-        self.h_m2 = res_bandwidth[0] * 1.5
+        self.h_m2 = res_bandwidth[0]
         (
             self.q_M,
             _first,

@@ -3,6 +3,15 @@ from scipy.stats import norm
 import scipy.interpolate as interpolate  # B-Spline
 from sklearn.neighbors import KernelDensity
 from matplotlib import pyplot as plt
+import math
+import random
+import pandas as pd
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
 
 
 def density_estimation(sample, S, h, kernel="epanechnikov"):
@@ -76,7 +85,7 @@ def linear_estimation(X, y, x, h, kernel):
     return y_pred, 0, 0, W_hi
 
 
-def bandwidth_cv(
+def bandwidth_cv_singlerun(
     X,
     y,
     x_bandwidth,
@@ -93,7 +102,78 @@ def bandwidth_cv(
             y_pred = smoothing(X_temp, Y_temp, x_test, h, kernel)[0]
             sqrt_err[i] = (y_test - y_pred) ** 2
         cv[b] = 1 / n * sum(sqrt_err)
-    return cv
+    h = x_bandwidth[cv.argmin()]
+    return (x_bandwidth, cv, h)
+
+
+def bandwidth_cv_slicing(
+    X,
+    y,
+    x_bandwidth,
+    smoothing=local_polynomial_estimation,
+    kernel=gaussian_kernel,
+    no_slices=20,
+):
+    np.random.seed(1)
+    df = pd.DataFrame(data=y, index=X)
+    df = df.sort_index()
+    X = np.array(df.index)
+    y = np.array(df[0])
+    n = X.shape[0]
+    idx = list(range(0, n))
+    slices = list(chunks(idx, math.ceil(n / no_slices)))
+    if len(slices[0]) > 15:
+        samples = 15
+    else:
+        samples = len(slices[0])
+
+    num = len(x_bandwidth)
+    cv = np.zeros(num)
+
+    for b, h in enumerate(x_bandwidth):
+        sqrt_err = np.zeros(no_slices)
+        for i, chunk in enumerate(slices):
+            X_train, X_test = np.delete(X, chunk), X[chunk]
+            y_train, y_test = np.delete(y, chunk), y[chunk]
+
+            runs = min(samples, len(chunk))
+            sqrt_err_tmp = np.zeros(runs)
+            for j, idx_test in enumerate(
+                random.sample(list(range(0, len(chunk))), runs)
+            ):
+                y_pred = smoothing(
+                    X_train, y_train, X_test[idx_test], h, kernel
+                )[0]
+                sqrt_err_tmp[j] = (y_test[idx_test] - y_pred) ** 2
+            sqrt_err[i] = sum(sqrt_err_tmp)
+        cv[b] = 1 / n * sum(sqrt_err)
+    h = x_bandwidth[cv.argmin()]
+    return (x_bandwidth, cv, h)
+
+
+def bandwidth_cv(
+    X,
+    y,
+    x_bandwidth,
+    smoothing=local_polynomial_estimation,
+    kernel=gaussian_kernel,
+    show_plot=False,
+):
+    x_bandwidth_1, cv_1, h_1 = bandwidth_cv_slicing(X, y, x_bandwidth)
+
+    stepsize = x_bandwidth[1] - x_bandwidth[0]
+    x_bandwidth_2 = np.linspace(
+        h_1 - (stepsize * 1.1), h_1 + (stepsize * 1.1), 10
+    )
+
+    x_bandwidth_2, cv_2, h_2 = bandwidth_cv_slicing(X, y, x_bandwidth_2)
+
+    print(h_1, h_2)
+    if show_plot:
+        plt.plot(x_bandwidth_1, cv_1)
+        plt.plot(x_bandwidth_2, cv_2)
+        plt.show()
+    return (x_bandwidth_2, cv_2, h_2), (x_bandwidth_1, cv_1, h_1)
 
 
 def create_fit(
