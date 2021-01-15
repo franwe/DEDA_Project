@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from os.path import join
 import numpy as np
 import pickle
+import pandas as pd
 
 from util.general import create_dates, load_tau_section_parameters
 from util.data import RndDataClass, HdDataClass
@@ -35,6 +36,7 @@ def save_data_to_pickle(day, tau_day, RND, rnd, hd, M, K, fig):
 
 
 def plot_MKM(
+    bw,
     RndData,
     HdData,
     day,
@@ -46,23 +48,27 @@ def plot_MKM(
     h_densfit=0.2,
     save=False,
 ):
-    filename = "T-{}_{}_M-K.png".format(tau_day, day)
+    filename = "T-{}_{}_M-K_corrected.png".format(tau_day, day)
     if reset_S:
-        filename = "T-{}_{}_M-K_S0.png".format(tau_day, day)
+        filename = "T-{}_{}_M-K_S0_corrected.png".format(tau_day, day)
 
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
+    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="unique")
     hd_data, S0 = HdData.filter_data(day)
     print(S0, day, tau_day)
     if reset_S:
         df_tau["S"] = S0
         df_tau["M"] = df_tau.S / df_tau.K
+        df_tau = df_tau.drop_duplicates()
 
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
-    RND.fit_smile()
-    RND.rookley()
+    h_m = bw[(bw.date == day) & (bw.tau_day == tau_day)]["h_m"].tolist()[0]
+    h_m2 = bw[(bw.date == day) & (bw.tau_day == tau_day)]["h_m2"].tolist()[0]
+    h_k = bw[(bw.date == day) & (bw.tau_day == tau_day)]["h_k"].tolist()[0]
+    RND = RndCalculator(df_tau, tau_day, day, h_m=h_m, h_m2=h_m2, h_k=h_k)
+    RND.fit_smile_corrected()
+    RND.rookley_corrected()
 
     # algorithm plot
-    fig_method = plot_rookleyMethod(RND)
+    fig_method = plot_rookleyMethod(RND, x)
     plt.tight_layout()
     # plt.show()
     fig_method.savefig(
@@ -136,13 +142,53 @@ def plot_MKM(
     return fig, filename
 
 
-# ----------------------------------------------------------- LOAD DATA HD, RND
+# ------------------------------------------------------------------------ MAIN
+# ------------------------------------------------------------------------ MAIN
+# ------------------------------------------------------------------------ MAIN
 x = 0.5
 HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
 # TODO: Influence of coutoff?
 
-(_, _, _, h, tau_min, tau_max) = load_tau_section_parameters("huge")
+# correction to boxplot mean +/- std get median
+bw = pd.read_csv(join(cwd, "data", "02-1_rnd", "bandwidths_bu.csv"))
+
+
+def replace_by_median(value, describe):
+    if (value > describe["mean"] + describe["std"]) or (
+        value < describe["mean"] - describe["std"]
+    ):
+        value = describe["50%"]
+    return value
+
+
+def replace_by_bound(value, describe):
+    if value > describe["75%"]:
+        value = describe["75%"]
+    elif value < describe["25%"]:
+        value = describe["25%"]
+    return value
+
+
+def replace_lower(value, describe):
+    if value < describe["25%"]:
+        value = describe["50%"]
+    return value
+
+
+cols = ["h_m", "h_m2"]
+for col in cols:
+    describe = bw[col].describe()
+    print(describe)
+    bw[col] = bw[col].apply(lambda val: replace_by_bound(val, describe))
+
+col = "h_k"
+describe = bw[col].describe()
+bw[col] = bw[col].apply(lambda val: replace_lower(val, describe))
+
+
+# ------------------------------------------------------------ CALCULATE RND HD
+(_, _, _, h, tau_min, tau_max) = load_tau_section_parameters("big")
 
 days = create_dates(start="2020-03-01", end="2020-09-30")
 for day in days:
@@ -153,6 +199,7 @@ for day in days:
         if (tau_day > tau_min) & (tau_day <= tau_max):
             try:
                 fig, filename = plot_MKM(
+                    bw,
                     RndData,
                     HdData,
                     day,
@@ -168,6 +215,8 @@ for day in days:
                 )
             except ValueError as e:
                 print("ValueError  : ", e, day, tau_day)
+            except IndexError as e:
+                print("IndexError  : ", e)
             except np.linalg.LinAlgError as e:
                 print("np.linalg.LinAlgError :  ", e)
                 print("cant invert matrix, smoothing_rookley")

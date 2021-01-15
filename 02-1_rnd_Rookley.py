@@ -21,12 +21,12 @@ RndData = RndDataClass(cutoff=x)
 
 RndData.analyse()
 
-day = "2020-03-12"
+day = "2020-05-12"
 print(RndData.analyse(day))
-tau_day = 15
+tau_day = 45
 
 overwrite = False
-reset_S = True
+reset_S = False
 
 print(day, tau_day)
 hd_data, S0 = HdData.filter_data(day)
@@ -36,20 +36,16 @@ if reset_S:
     df_tau["S"] = S0
     df_tau["M"] = df_tau.S / df_tau.K
     df_tau = df_tau.drop_duplicates()
-RND = RndCalculator(df_tau, tau_day, day, h_densfit=0.1)
+RND = RndCalculator(df_tau, tau_day, day)
 print("Number of options today: ", RND.data.shape[0])
 
-X = np.array(RND.data.M)
-y = np.array(RND.data.iv)
-res_bandwidth, res_fit = RND.bandwidth_and_fit(X, y)
-RND.h_m = res_bandwidth[0]
-RND.smile, RND.first, RND.second, RND.M_smile = res_fit
+RND.fit_smile()
 
-X = np.array(RND.data.M)
-y = np.array(RND.data.iv)
-fig_weights = plot_locpoly_weights(
-    X, y, [0.8, 1, 1.25], h1=RND.h_m, h2=RND.h_m / 2
-)
+# X = np.array(RND.data.M)
+# y = np.array(RND.data.iv)
+# fig_weights = plot_locpoly_weights(
+#     X, y, [0.8, 1, 1.25], h1=RND.h_m, h2=RND.h_m / 2
+# )
 # plt.show()
 # plt.tight_layout()
 # fig_weights.savefig(

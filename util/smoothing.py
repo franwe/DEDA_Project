@@ -112,7 +112,7 @@ def bandwidth_cv_slicing(
     x_bandwidth,
     smoothing=local_polynomial_estimation,
     kernel=gaussian_kernel,
-    no_slices=20,
+    no_slices=15,
 ):
     np.random.seed(1)
     df = pd.DataFrame(data=y, index=X)
@@ -122,8 +122,8 @@ def bandwidth_cv_slicing(
     n = X.shape[0]
     idx = list(range(0, n))
     slices = list(chunks(idx, math.ceil(n / no_slices)))
-    if len(slices[0]) > 15:
-        samples = 15
+    if len(slices[0]) > 27:
+        samples = 27
     else:
         samples = len(slices[0])
 

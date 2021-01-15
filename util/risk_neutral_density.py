@@ -10,13 +10,25 @@ from util.smoothing import (
 )
 from util.density import pointwise_density_trafo_K2M
 from statsmodels.nonparametric.bandwidths import bw_silverman
+import os
+from os.path import join
+import pandas as pd
+
+cwd = os.getcwd() + os.sep
+source_data = join(cwd, "data", "00-raw") + os.sep
+save_data = join(cwd, "data", "02-1_rnd") + os.sep
 
 
 def create_bandwidth_range(X, bins_max=30, num=10):
     bw_silver = bw_silverman(X)
-    x_bandwidth = np.linspace(0.5 * bw_silver, 4 * bw_silver, num)
+    if bw_silver > 10:
+        lower_bound = max(0.5 * bw_silver, 100)
+    else:
+        lower_bound = max(0.5 * bw_silver, 0.03)
+    lower_bound = 0.5
+    x_bandwidth = np.linspace(lower_bound, 7 * bw_silver, num)
     print("------ Silverman: ", bw_silver)
-    return x_bandwidth
+    return x_bandwidth, bw_silver, lower_bound
 
 
 def spd_appfinance(M, S, K, o, o1, o2, r, tau):
@@ -69,12 +81,13 @@ def spd_appfinance(M, S, K, o, o1, o2, r, tau):
 
 
 class RndCalculator:
-    def __init__(self, data, tau_day, date, h_densfit=None, h_iv=None):
+    def __init__(self, data, tau_day, date, h_m=None, h_m2=None, h_k=None):
         self.data = data
         self.tau_day = tau_day
         self.date = date
-        self.h_m = None
-        self.h_k = None
+        self.h_m = h_m
+        self.h_m2 = h_m2
+        self.h_k = h_k
         self.r = 0
 
         self.tau = self.data.tau.iloc[0]
@@ -89,14 +102,32 @@ class RndCalculator:
 
     # -------------------------------------------------------------- SPD NORMAL
     def bandwidth_and_fit(self, X, y):
-        x_bandwidth = create_bandwidth_range(X)
+        x_bandwidth, bw_silver, lower_bound = create_bandwidth_range(X)
         cv_results = bandwidth_cv(
             X, y, x_bandwidth, smoothing=local_polynomial_estimation
         )[0]
         cv = cv_results[1]
         h = cv_results[2]
+
         fit, first, second, X_domain = create_fit(X, y, h)
+
         return (h, x_bandwidth, cv), (fit, first, second, X_domain)
+
+    def fit_smile(self):
+        X = np.array(self.data.M)
+        y = np.array(self.data.iv)
+        res_bandwidth, res_fit = self.bandwidth_and_fit(X, y)
+        self.h_m = res_bandwidth[0]
+        self.smile, self.first, self.second, self.M_smile = res_fit
+        return
+
+    def fit_smile_corrected(self):
+        X = np.array(self.data.M)
+        y = np.array(self.data.iv)
+        self.smile, self.first, self.second, self.M_smile = create_fit(
+            X, y, self.h_m
+        )
+        return
 
     def rookley(self):
         spd = spd_appfinance
@@ -156,8 +187,69 @@ class RndCalculator:
             _first,
             _second,
             self.M,
-        ) = create_fit(X, y, self.h_m2)
+        ) = res_fit
 
+        bandwidths = pd.DataFrame(
+            [self.date, self.tau_day, self.h_m, self.h_m2, self.h_k]
+        ).T
+        bandwidths.to_csv(
+            join(save_data, "bandwidths.csv"),
+            index=False,
+            header=False,
+            mode="a",
+        )
+        return
+
+    def rookley_corrected(self):
+        spd = spd_appfinance
+        # ------------------------------------ B-SPLINE on SMILE, FIRST, SECOND
+        pars, spline, points = bspline(
+            self.M_smile, self.smile, sections=8, degree=3
+        )
+        # derivatives
+        first_fct = spline.derivative(1)
+        second_fct = spline.derivative(2)
+
+        # step 1: calculate spd for every option-point "Rookley's method"
+        self.data["q"] = self.data.apply(
+            lambda row: spd(
+                row.M,
+                row.S,
+                row.K,
+                spline(row.M),
+                first_fct(row.M),
+                second_fct(row.M),
+                self.r,
+                self.tau,
+            ),
+            axis=1,
+        )
+
+        # step 2: Rookley results (points in K-domain) - fit density curve
+        X = np.array(self.data.K)
+        y = np.array(self.data.q)
+
+        (
+            self.q_K,
+            _first,
+            _second,
+            self.K,
+        ) = create_fit(X, y, self.h_k)
+
+        # step 3: transform density POINTS from K- to M-domain
+        self.data["q_M"] = pointwise_density_trafo_K2M(
+            self.K, self.q_K, self.data.S, self.data.M
+        )
+
+        # step 4: density points in M-domain - fit density curve
+        X = np.array(self.data.M)
+        y = np.array(self.data.q_M)
+        (
+            self.q_M,
+            _first,
+            _second,
+            self.M,
+        ) = create_fit(X, y, self.h_m2)
         return
 
     def calc_deriv(self, option):
@@ -196,24 +288,33 @@ class RndCalculator:
         )
 
 
-def plot_rookleyMethod(RND):
-    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 4))
+def plot_rookleyMethod(RND, x=0.5):
+    fig, (ax0, ax1, ax2, ax3) = plt.subplots(1, 4, figsize=(12, 4))
 
     # smile
     ax0.scatter(RND.data.M, RND.data.iv, c="r", s=4)
     ax0.plot(RND.M_smile, RND.smile)
     ax0.set_xlabel("Moneyness")
     ax0.set_ylabel("implied volatility")
+    ax0.set_xlim(1 - x, 1 + x)
 
     # derivatives
     ax1.plot(RND.M_smile, RND.smile)
     ax1.plot(RND.M_smile, RND.first)
     ax1.plot(RND.M_smile, RND.second)
     ax1.set_xlabel("Moneyness")
+    ax1.set_xlim(1 - x, 1 + x)
 
-    # density
-    ax2.scatter(RND.data.M, RND.data.q_M, c="r", s=4)
-    ax2.plot(RND.M, RND.q_M)
-    ax2.set_xlabel("Moneyness")
+    # density q_k
+    ax2.scatter(RND.data.K, RND.data.q, c="r", s=4)
+    ax2.plot(RND.K, RND.q_K)
+    ax2.set_xlabel("Strike Price")
     ax2.set_ylabel("risk neutral density")
+
+    # density q_m
+    ax3.scatter(RND.data.M, RND.data.q_M, c="r", s=4)
+    ax3.plot(RND.M, RND.q_M)
+    ax3.set_xlabel("Moneyness")
+    ax3.set_ylabel("risk neutral density")
+    ax3.set_xlim(1 - x, 1 + x)
     return fig
