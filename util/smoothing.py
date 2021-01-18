@@ -208,7 +208,11 @@ def plot_locpoly_weights(X, y, x_points, h1, h2, kernel=gaussian_kernel):
     y = np.array(df[0])
 
     fig, (ax0, ax1) = plt.subplots(
-        2, 1, sharex=True, gridspec_kw={"height_ratios": [4, 1]}
+        2,
+        1,
+        sharex=True,
+        gridspec_kw={"height_ratios": [4, 1]},
+        figsize=(4, 4),  # widht, hight
     )
     # density points
     y_density = np.zeros(X.shape[0])
@@ -224,6 +228,7 @@ def plot_locpoly_weights(X, y, x_points, h1, h2, kernel=gaussian_kernel):
         labelleft=False,  # labels along the bottom edge are off)
     )
     ax1.set_xlabel("Moneyness")
+    ax0.set_ylabel(r"Weight $W_i$")
 
     # weights
     for x, c in zip(x_points, ["#1f77b4", "#ff7f0e", "#2ca02c"]):

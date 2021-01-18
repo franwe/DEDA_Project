@@ -25,7 +25,6 @@ def create_bandwidth_range(X, bins_max=30, num=10):
         lower_bound = max(0.5 * bw_silver, 100)
     else:
         lower_bound = max(0.5 * bw_silver, 0.03)
-    lower_bound = 0.5
     x_bandwidth = np.linspace(lower_bound, 7 * bw_silver, num)
     print("------ Silverman: ", bw_silver)
     return x_bandwidth, bw_silver, lower_bound

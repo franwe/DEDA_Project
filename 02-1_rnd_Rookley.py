@@ -21,9 +21,9 @@ RndData = RndDataClass(cutoff=x)
 
 RndData.analyse()
 
-day = "2020-05-12"
+day = "2020-05-11"
 print(RndData.analyse(day))
-tau_day = 45
+tau_day = 11
 
 overwrite = False
 reset_S = False
@@ -41,16 +41,17 @@ print("Number of options today: ", RND.data.shape[0])
 
 RND.fit_smile()
 
-# X = np.array(RND.data.M)
-# y = np.array(RND.data.iv)
-# fig_weights = plot_locpoly_weights(
-#     X, y, [0.8, 1, 1.25], h1=RND.h_m, h2=RND.h_m / 2
-# )
-# plt.show()
-# plt.tight_layout()
-# fig_weights.savefig(
-#     join(save_plots, "Locpoly_Weights_{}.png".format(day)), transparent=True
-# )
+X = np.array(RND.data.M)
+y = np.array(RND.data.iv)
+fig_weights = plot_locpoly_weights(
+    X, y, [0.8, 1, 1.25], h1=RND.h_m, h2=RND.h_m / 2
+)
+plt.tight_layout()
+plt.show()
+fig_weights.savefig(
+    join(save_plots, "Locpoly_Weights_{}_{}.png".format(day, tau_day)),
+    transparent=True,
+)
 
 RND.rookley()
 
@@ -58,7 +59,8 @@ fig_method = plot_rookleyMethod(RND)
 plt.tight_layout()
 plt.show()
 fig_method.savefig(
-    join(save_plots, "RookleyMethod_{}.png".format(day)), transparent=True
+    join(save_plots, "RookleyMethod_{}_{}.png".format(day, tau_day)),
+    transparent=True,
 )
 
 a = 1
