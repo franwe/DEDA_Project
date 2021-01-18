@@ -14,7 +14,7 @@ source_data = join(cwd, "data", "00-raw") + os.sep
 trade_data_directory = join(cwd, "data", "03-1_trades") + os.sep
 
 
-df = pd.read_csv(trade_data_directory + "trades_02.csv")
+df = pd.read_csv(trade_data_directory + "trades.csv")
 df["id"] = range(0, df.shape[0])
 df.set_index("id", inplace=True, drop=False)
 
