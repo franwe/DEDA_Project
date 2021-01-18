@@ -92,10 +92,23 @@ for day in days:
             trading_tau = tau_day - 1
 
             RndData = RndDataClass(cutoff=x)
-            df_tau = RndData.filter_data(
-                date=trading_day, tau_day=trading_tau, mode="unique"
-            )
-            df_tau = execute_options(df_tau, trading_day, trading_tau)
+            try:
+                df_tau = RndData.filter_data(
+                    date=trading_day, tau_day=trading_tau, mode="unique"
+                )
+            except AttributeError:
+                logging.info(
+                    trading_day,
+                    trading_tau,
+                    " ---- missing data for trading day",
+                )
+                break
+
+            try:
+                df_tau = execute_options(df_tau, trading_day, trading_tau)
+            except KeyError:
+                logging.info(day, tau_day, " ---- Maturity not reached yet")
+                break
 
             call_mask = df_tau.option == "C"
             df_tau["color"] = "blue"  # blue - put
@@ -139,14 +152,6 @@ for day in days:
                 df_tau,
                 results,
             )
-
-            # try:
-            #     RND = execute_options(RND, day, tau_day)
-            #     RND = general_trading_payoffs(RND)
-            # except KeyError:
-            #     logging.info(day, tau_day, " ---- Maturity not reached yet")
-
-            #     break
 
 
 df_results.to_csv(save_data + filename, index=False)
