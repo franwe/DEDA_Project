@@ -1,5 +1,7 @@
 import pandas as pd
 
+from datetime import datetime, timedelta
+
 
 def create_dates(start, end):
     dates = pd.date_range(start, end, closed="right", freq="D")
@@ -21,3 +23,10 @@ def load_tau_section_parameters(tau_section):
         return "trades_bigTau.csv", 0.15, 0.35, 0.25, 40, 99
     elif tau_section == "huge":
         return "trades_hugeTau.csv", 0.2, 0.4, 0.35, 99, 182
+
+
+def add_one_day(daystr):
+    dt = datetime.strptime(daystr, "%Y-%m-%d")
+    dt_p1 = dt + timedelta(days=1)
+    tomorrow = dt_p1.strftime("%Y-%m-%d")
+    return tomorrow

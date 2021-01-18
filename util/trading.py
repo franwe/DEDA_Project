@@ -4,10 +4,14 @@ from os.path import join
 import numpy as np
 from datetime import datetime, timedelta
 import pickle
+from itertools import groupby
+from operator import itemgetter
+import pandas as pd
 
 from util.risk_neutral_density import RndCalculator
 from util.historical_density import HdCalculator
-from util.smoothing import bspline
+
+# from util.smoothing import bspline
 from util.connect_db import connect_db, get_as_df
 from util.density import hd_rnd_domain
 
@@ -18,131 +22,37 @@ save_plots = join(cwd, "plots") + os.sep
 garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 
 
-def get_densities(
-    RndData,
-    HdData,
-    day,
-    tau_day,
-    x,
-    y_lim=None,
-    reset_S=True,
-    overwrite=False,
-    h_densfit=0.15,
-    cutoff=0.5,
-):
-
-    df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
-
-    hd_data, S0 = HdData.filter_data(day)
-    print(S0, day, tau_day)
-    if reset_S:
-        df_tau["S"] = S0
-
-    df_tau["M"] = df_tau.S / df_tau.K
-
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
-    RND.fit_smile()
-    RND.rookley()
-
-    HD = HdCalculator(
-        data=hd_data,
-        S0=S0,
-        path=garch_data,
-        tau_day=tau_day,
-        date=day,
-        cutoff=cutoff,
-        n=400,
-        M=5000,
-        overwrite=overwrite,
-    )
-    HD.get_hd(variate=True)
-    return HD, RND
+def _M_bounds_from_list(lst, df):
+    groups = [
+        [i for i, _ in group]
+        for key, group in groupby(enumerate(lst), key=itemgetter(1))
+        if key
+    ]
+    M_bounds = []
+    for group in groups:
+        M_bounds.append((df.M[group[0]], df.M[group[-1]]))
+    return M_bounds
 
 
-def plot_hd_rnd(HD, RND, x, day, tau_day):
-    hd, rnd, M = hd_rnd_domain(
-        # HD,
-        # RND,
-        # interval=[1 - x, 1 + x]
-        HD,
-        RND,
-        interval=[RND.data.M.min() * 0.9, RND.data.M.max() * 1.1],
-    )
-    calls = RND.data[RND.data.option == "C"]
-    puts = RND.data[RND.data.option == "P"]
+def get_buy_sell_bounds(rnd, hd, M, K_bound=0):
+    K = rnd / hd
+    df = pd.DataFrame({"M": M, "K": K})
+    df["buy"] = df.K < (1 - K_bound)
+    df["sell"] = df.K > (1 + K_bound)
 
-    # -------------------------------------------------------------------- Plot
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-
-    ax.plot(HD.M, HD.q_M, "b")
-    ax.plot(RND.M, RND.q_M, "r")
-    ax.plot(M, hd, "b", ls=":")
-    ax.plot(M, rnd, "r", ls=":")
-    ax.scatter(calls.M, calls.q_M, 5, c="r", label="calls")
-    ax.scatter(puts.M, puts.q_M, 5, c="b", label="puts")
-
-    ax.text(
-        0.99,
-        0.99,
-        str(day) + "\n" + r"$\tau$ = " + str(tau_day),
-        horizontalalignment="right",
-        verticalalignment="top",
-        transform=ax.transAxes,
-    )
-    ax.set_ylim(0)
-    ax.set_xlim((1 - x), (1 + x))
-    return fig, hd, rnd, M
+    M_bounds_sell = _M_bounds_from_list(df.sell.tolist(), df)
+    M_bounds_buy = _M_bounds_from_list(df.buy.tolist(), df)
+    return M_bounds_sell, M_bounds_buy
 
 
-def create_intervals(sequence, M):
-    last = sequence[0]
-    intervals = []
-    this_interval = [last, M[0]]
-    for i, tf in enumerate(sequence):
-        if tf == last:
-            pass
-        else:
-            this_interval.append(M[i - 1])
-            intervals.append(this_interval)
-            # set up new interval
-            last = tf
-            this_interval = [last, M[i]]
-    this_interval.append(M[i])
-    intervals.append(this_interval)
-    return intervals
-
-
-def add_action(RND, intervals):
-    """add a column with trader's action to the RND dataframe
-
-    Args:
-        RND (class): RND class with object RND.data dataframe
-        intervals (list): list of intervals with [bool, start_idx, end_idx]
-                          True: 'buy', False: 'sell'
-        M (array): array of moneyness values, belonging to start_idx/end_idx
-
-    Returns:
-        class: RND class with new column RND.data.action 'buy'/'sell'
-    """
-    RND.data["action"] = None
-    for interval in intervals:
-        tf, start, end = interval
-        mask = (RND.data.M >= start) & (RND.data.M < end)
-        if tf == True:
-            RND.data.loc[mask, "action"] = "buy"
-        elif tf == False:
-            RND.data.loc[mask, "action"] = "sell"
-    return RND
-
-
-def get_payoff(K, ST, option):
+def _get_payoff(K, ST, option):
     if option == "C":
         return max(ST - K, 0)
     elif option == "P":
         return max(K - ST, 0)
 
 
-def execute_options(RND, day, tau_day):
+def execute_options(data, day, tau_day):
     eval_day = datetime.strptime(day, "%Y-%m-%d") + timedelta(days=tau_day)
     db = connect_db()
 
@@ -153,199 +63,217 @@ def execute_options(RND, day, tau_day):
     query = {"date_str": day}
     S0 = get_as_df(coll, query)["price"].iloc[0]
 
-    RND.data["ST"] = ST
-    RND.data["opt_payoff"] = RND.data.apply(
-        lambda row: get_payoff(row.K, ST, row.option), axis=1
+    data["ST"] = ST
+    data["opt_payoff"] = data.apply(
+        lambda row: _get_payoff(row.K, ST, row.option), axis=1
     )
     print("--- S0: {} --- ST: {} --- M: {}".format(S0, ST, S0 / ST))
-    return RND
+    return data
 
 
-def calculate_fee(P, S, max_fee_BTC=0.0004, max_fee_pct=0.2):
+def _calculate_fee(P, S, max_fee_BTC=0.0004, max_fee_pct=0.2):
     option_bound = max_fee_pct * P
     underlying_bound = max_fee_BTC * S
     fee = min(underlying_bound, option_bound)
     return fee
 
 
-def general_trading_payoffs(RND):
-    buy_mask = RND.data.action == "buy"
+def _trading_payoffs(data):
+    buy_mask = data.action == "buy"
 
-    RND.data["trading_fee"] = RND.data.apply(
-        lambda row: calculate_fee(row.P, row.S, max_fee_BTC=0.0004), axis=1
+    data["trading_fee"] = data.apply(
+        lambda row: _calculate_fee(row.P, row.S, max_fee_BTC=0.0004), axis=1
     )
-    RND.data["t0_payoff"] = RND.data["P"]
-    RND.data.loc[buy_mask, "t0_payoff"] = -1 * RND.data.loc[buy_mask, "P"]
-    RND.data["t0_payoff"] = RND.data["t0_payoff"] - RND.data["trading_fee"]
+    data["t0_payoff"] = data["P"]
+    data.loc[buy_mask, "t0_payoff"] = -1 * data.loc[buy_mask, "P"]
+    data["t0_payoff"] = data["t0_payoff"] - data["trading_fee"]
 
-    RND.data["T_payoff"] = -1 * RND.data["opt_payoff"]
-    RND.data.loc[buy_mask, "T_payoff"] = (
-        +1 * RND.data.loc[buy_mask, "opt_payoff"]
-    )
-    RND.data["delivery_fee"] = RND.data.apply(
-        lambda row: calculate_fee(row.T_payoff, row.S, max_fee_BTC=0.0002),
+    data["T_payoff"] = -1 * data["opt_payoff"]
+    data.loc[buy_mask, "T_payoff"] = +1 * data.loc[buy_mask, "opt_payoff"]
+    data["delivery_fee"] = data.apply(
+        lambda row: _calculate_fee(row.T_payoff, row.S, max_fee_BTC=0.0002),
         axis=1,
     )
-    RND.data.loc[~buy_mask, "delivery_fee"] = 0  # only applies to TAKER ORDERS
-    RND.data["T_payoff"] = RND.data["T_payoff"] - RND.data["delivery_fee"]
+    data.loc[~buy_mask, "delivery_fee"] = 0  # only applies to TAKER ORDERS
+    data["T_payoff"] = data["T_payoff"] - data["delivery_fee"]
 
-    RND.data["total"] = RND.data.t0_payoff + RND.data.T_payoff
-    return RND
-
-
-def create_trading_mask(RND, option, action, M_interval):
-    trading_mask = (
-        (RND.data.option == option)
-        & (RND.data.action == action)
-        & (RND.data.M > M_interval[0])
-        & (RND.data.M <= M_interval[1])
-    )
-    return trading_mask
-
-
-def get_trades_from_df(RND, trading_mask, option):
-    trades = (
-        RND.data[trading_mask][
-            ["t0_payoff", "T_payoff", "total", "K", "option"]
-        ]
-        .groupby(by="K")
-        .mean()
-    )
-    trades = trades.reset_index()
-    trades["option"] = option
-    return trades
-
-
-def skewness_trade(RND, far_bound, trade_type="S1"):
-    if trade_type == "S1":
-        call_action = "buy"
-        put_action = "sell"
-    elif trade_type == "S2":
-        call_action = "sell"
-        put_action = "buy"
-
-    far_call_mask = create_trading_mask(
-        RND, "C", call_action, [0, 1 - far_bound]
-    )
-    far_put_mask = create_trading_mask(
-        RND, "P", put_action, [1 + far_bound, 2]
-    )
-
-    trade_calls = get_trades_from_df(RND, far_call_mask, "C")
-    trade_puts = get_trades_from_df(RND, far_put_mask, "P")
-    return trade_calls, trade_puts
-
-
-def trade_results(possible_trades, n=None):
-    shapes = []
-    for trades in possible_trades:
-        shape = trades.shape[0]
-        shapes.append(shape)
-    n_max = min(shapes)  # max possible n to have symmetric trade
-
-    if n_max == 0:
-        return None, None
-
-    if n is None:
-        n = n_max
-    else:
-        n = min(n, n_max)
-
-    trades_0 = possible_trades[0].iloc[0:n]
-    trades_1 = possible_trades[1].iloc[-n:]
-
-    result = trades_0.sum() + trades_1.sum()
-    return result, trades_0.append(trades_1, ignore_index=True)
-
-
-def kurtosis_trade(RND, near_bound, far_bound, trade_type="K1"):
-    if trade_type == "K1":
-        atm_action = "sell"
-        otm_action = "buy"
-    elif trade_type == "K2":
-        atm_action = "buy"
-        otm_action = "sell"
-
-    otm_call_mask = create_trading_mask(
-        # RND, "C", otm_action, [1 - far_bound, 1 - near_bound]
-        RND,
-        "C",
-        otm_action,
-        [0, 1 - near_bound],
-    )
-    atm_call_mask = create_trading_mask(
-        RND, "C", atm_action, [1 - near_bound, 1]
-    )
-    atm_put_mask = create_trading_mask(
-        RND, "P", atm_action, [1, 1 + near_bound]
-    )
-    otm_put_mask = create_trading_mask(
-        # RND, "P", otm_action, [1 + near_bound, 1 + far_bound]
-        RND,
-        "P",
-        otm_action,
-        [1 + near_bound, 2],
-    )
-
-    otm_call_trades = get_trades_from_df(RND, otm_call_mask, "C")
-    atm_call_trades = get_trades_from_df(RND, atm_call_mask, "C")
-    atm_put_trades = get_trades_from_df(RND, atm_put_mask, "P")
-    otm_put_trades = get_trades_from_df(RND, otm_put_mask, "P")
-
-    return otm_call_trades, atm_call_trades, atm_put_trades, otm_put_trades
-
-
-def create_option_trade_table(RND, single_trades):
-    a = RND.data.groupby(by=["K", "option"]).mean().reset_index()
-    a["color"] = "r"
-    a.loc[a.option == "P", "color"] = "b"
-
-    if single_trades.shape[0] == 0:
-        trade_table = a
-        trade_table["traded"] = 0
-    else:
-        single_trades = single_trades[["K", "option"]]
-        single_trades["traded"] = 1
-        trade_table = a.merge(single_trades, on=["K", "option"], how="left")
-        trade_table = trade_table.replace(np.nan, 0)
-    return trade_table[
-        [
-            "K",
-            "M",
-            "q_M",
-            "S",
-            "ST",
-            "t0_payoff",
-            "T_payoff",
-            "total",
-            "color",
-            "traded",
-        ]
-    ]
-
-
-def save_trades_to_pickle(
-    data_path, day, tau_day, rnd, hd, kernel, M, trade_table
-):
-    data = {
-        "date": day,
-        "tau_day": tau_day,
-        "rnd": rnd,
-        "hd": hd,
-        "M": M,
-        "kernel": kernel,
-        "trade_table": trade_table,
-    }
-    with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "wb") as handle:
-        pickle.dump(data, handle)
-
-
-def load_trades_from_pickle(data_path, day, tau_day):
-    with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "rb") as handle:
-        data = pickle.load(handle)
+    data["total"] = data.t0_payoff + data.T_payoff
     return data
 
 
+def add_results_to_table(
+    df_results, results, trading_day, trading_tau, deviates_from_one_ratio
+):
+    if len(results) == 0:
+        entry = {
+            "date": trading_day,
+            "tau_day": trading_tau,
+            "t0_payoff": 0,
+            "T_payoff": 0,
+            "total": 0,
+            "trade": "-",
+            "kernel": deviates_from_one_ratio,
+        }
+        df_results = df_results.append(entry, ignore_index=True)
+
+    else:
+        for key in results:
+            df_trades = results[key]
+
+            entry = {
+                "date": trading_day,
+                "tau_day": trading_tau,
+                "t0_payoff": df_trades.t0_payoff.sum(),
+                "T_payoff": df_trades.T_payoff.sum(),
+                "total": df_trades.total.sum(),
+                "trade": key,
+                "kernel": deviates_from_one_ratio,
+            }
+            df_results = df_results.append(entry, ignore_index=True)
+    return df_results
+
+
+# ---------------------------------------------------------- TRADING STRATEGIES
+def K1(df_tau, M_bounds_buy, M_bounds_sell):
+    df = df_tau[
+        ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
+    ].sort_values(by="M")
+
+    all_atm_call = df[
+        (df.M > M_bounds_sell[0][0])
+        & (df.M < M_bounds_sell[0][1])
+        & (df.option == "C")
+    ]
+    sell_atm_call = all_atm_call.iloc[0]
+    sell_atm_call["action"] = "sell"
+
+    all_atm_put = df[
+        (df.M > M_bounds_sell[0][0])
+        & (df.M < M_bounds_sell[0][1])
+        & (df.option == "P")
+    ]
+    sell_atm_put = all_atm_put.iloc[-1]
+    sell_atm_put["action"] = "sell"
+
+    all_otm_call = df[
+        (df.M > M_bounds_buy[0][0])
+        & (df.M < M_bounds_buy[0][1])
+        & (df.option == "C")
+    ]
+    buy_otm_call = all_otm_call.iloc[-1]
+    buy_otm_call["action"] = "buy"
+    all_otm_put = df[
+        (df.M > M_bounds_buy[1][0])
+        & (df.M < M_bounds_buy[1][1])
+        & (df.option == "P")
+    ]
+    buy_otm_put = all_otm_put.iloc[0]
+    buy_otm_put["action"] = "buy"
+
+    df_trades = pd.DataFrame(
+        [buy_otm_call, sell_atm_call, sell_atm_put, buy_otm_put]
+    )
+    return _trading_payoffs(df_trades)
+
+
+def K2(df_tau, M_bounds_buy, M_bounds_sell):
+    df = df_tau[
+        ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
+    ].sort_values(by="M")
+
+    all_atm_call = df[
+        (df.M > M_bounds_buy[0][0])
+        & (df.M < M_bounds_buy[0][1])
+        & (df.option == "C")
+    ]
+    buy_atm_call = all_atm_call.iloc[0]
+    buy_atm_call["action"] = "buy"
+
+    all_atm_put = df[
+        (df.M > M_bounds_buy[0][0])
+        & (df.M < M_bounds_buy[0][1])
+        & (df.option == "P")
+    ]
+    buy_atm_put = all_atm_put.iloc[-1]
+    buy_atm_put["action"] = "buy"
+
+    all_otm_call = df[
+        (df.M > M_bounds_sell[0][0])
+        & (df.M < M_bounds_sell[0][1])
+        & (df.option == "C")
+    ]
+    sell_otm_call = all_otm_call.iloc[-1]
+    sell_otm_call["action"] = "sell"
+
+    all_otm_put = df[
+        (df.M > M_bounds_sell[1][0])
+        & (df.M < M_bounds_sell[1][1])
+        & (df.option == "P")
+    ]
+    sell_otm_put = all_otm_put.iloc[0]
+    sell_otm_put["action"] = "sell"
+
+    df_trades = pd.DataFrame(
+        [sell_otm_call, buy_atm_call, buy_atm_put, sell_otm_put]
+    )
+    return _trading_payoffs(df_trades)
+
+
+def S1(df_tau, M_bounds_buy, M_bounds_sell):
+    df = df_tau[
+        ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
+    ].sort_values(by="M")
+
+    all_otm_call = df[
+        (df.M > M_bounds_buy[0][0])
+        & (df.M < M_bounds_buy[0][1])
+        & (df.M < 0.85)  # far otm
+        & (df.option == "C")
+    ]
+    buy_otm_call = all_otm_call.iloc[-1]
+    buy_otm_call["action"] = "buy"
+
+    all_otm_put = df[
+        (df.M > M_bounds_sell[0][0])
+        & (df.M < M_bounds_sell[0][1])
+        & (df.M > 1.15)  # far otm
+        & (df.option == "P")
+    ]
+    sell_otm_put = all_otm_put.iloc[0]
+    sell_otm_put["action"] = "sell"
+
+    df_trades = pd.DataFrame([buy_otm_call, sell_otm_put])
+    return _trading_payoffs(df_trades)
+
+
+def S2(df_tau, M_bounds_buy, M_bounds_sell):
+    df = df_tau[
+        ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
+    ].sort_values(by="M")
+
+    all_otm_call = df[
+        (df.M > M_bounds_sell[0][0])
+        & (df.M < M_bounds_sell[0][1])
+        & (df.M < 0.85)  # far otm
+        & (df.option == "C")
+    ]
+    sell_otm_call = all_otm_call.iloc[-1]
+    sell_otm_call["action"] = "sell"
+
+    all_otm_put = df[
+        (df.M > M_bounds_buy[0][0])
+        & (df.M < M_bounds_buy[0][1])
+        & (df.M > 1.15)  # far otm
+        & (df.option == "P")
+    ]
+    buy_otm_put = all_otm_put.iloc[0]
+    buy_otm_put["action"] = "buy"
+
+    df_trades = pd.DataFrame([sell_otm_call, buy_otm_put])
+    return _trading_payoffs(df_trades)
+
+
+# ------------------------------------------------------- DATASTUFF - LOAD SAVE
 def load_rnd_hd_from_pickle(data_path, day, tau_day):
     with open(data_path + "T-{}_{}.pkl".format(tau_day, day), "rb") as handle:
         data = pickle.load(handle)
@@ -353,5 +281,100 @@ def load_rnd_hd_from_pickle(data_path, day, tau_day):
     RND = data["RND"]
     hd, rnd, M = data["hd"], data["rnd"], data["M"]
     kernel = data["kernel"]
-    trade_table = {}
-    return RND, hd, rnd, kernel, M, trade_table
+    return RND, hd, rnd, kernel, M
+
+
+def save_trades_to_pickle(
+    data_path,
+    trading_day,
+    trading_tau,
+    rnd,
+    rnd_points,
+    hd,
+    kernel,
+    M,
+    K_bound,
+    M_bounds_buy,
+    M_bounds_sell,
+    df_all,
+    results,
+):
+    if len(results) == 0:
+        content = {
+            "day": trading_day,
+            "tau_day": trading_tau,
+            "trade": "-",
+            "rnd": rnd,
+            "rnd_points": rnd_points,  # M, q, color
+            "hd": hd,
+            "kernel": kernel,
+            "M": M,
+            "K_bound": K_bound,
+            "M_bounds_buy": M_bounds_buy,
+            "M_bounds_sell": M_bounds_sell,
+            "df_all": df_all,
+            "df_trades": None,
+        }
+
+        filename = "T-{}_{}_{}.pkl".format(trading_tau, trading_day, "-")
+        with open(data_path + filename, "wb") as handle:
+            pickle.dump(content, handle)
+        return
+    else:
+        for trade in results:
+            df_trades = results[trade]
+            content = {
+                "day": trading_day,
+                "tau_day": trading_tau,
+                "trade": trade,
+                "rnd": rnd,
+                "rnd_points": rnd_points,  # M, q, color
+                "hd": hd,
+                "kernel": kernel,
+                "M": M,
+                "K_bound": K_bound,
+                "M_bounds_buy": M_bounds_buy,
+                "M_bounds_sell": M_bounds_sell,
+                "df_all": df_all,
+                "df_trades": df_trades,
+            }
+
+            filename = "T-{}_{}_{}.pkl".format(trading_tau, trading_day, trade)
+            with open(data_path + filename, "wb") as handle:
+                pickle.dump(content, handle)
+    return
+
+
+def load_trades_from_pickle(data_path, day, tau_day, trade):
+    with open(
+        data_path + "T-{}_{}_{}.pkl".format(tau_day, day, trade), "rb"
+    ) as handle:
+        data = pickle.load(handle)
+    return data
+
+
+# --------------------------------------------------------------- PLOT STRATEGY
+def plot_strategy(
+    M, kernel, df_tau, df_trades, K_bound, M_bounds_sell, M_bounds_buy, x=0.5
+):
+    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+    ax.scatter(
+        df_tau.M,
+        [1] * len(df_tau.M),
+        c=df_tau.color,
+        marker="|",
+        s=10,
+        alpha=0.5,
+    )
+    ax.scatter(df_trades.M, [1] * len(df_trades.M), c=df_trades.color, s=20)
+    ax.plot(M, kernel)
+    ax.axhspan(1 - K_bound, 1 + K_bound, color="grey", alpha=0.1)
+    for interval in M_bounds_buy:
+        ax.axvspan(interval[0], interval[1], color="blue", alpha=0.1)
+    for interval in M_bounds_sell:
+        ax.axvspan(interval[0], interval[1], color="red", alpha=0.1)
+    ax.set_xlim((1 - x), (1 + x))
+    ax.set_xlabel("Moneyness")
+    ax.set_ylabel("Kernel = rnd/hd")
+    ax.set_ylim(0, 2)
+    return fig
