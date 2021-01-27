@@ -21,9 +21,9 @@ RndData = RndDataClass(cutoff=x)
 
 RndData.analyse()
 
-day = "2020-05-11"
+day = "2020-03-08"
 print(RndData.analyse(day))
-tau_day = 11
+tau_day = 47
 
 overwrite = False
 reset_S = False

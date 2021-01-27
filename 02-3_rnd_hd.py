@@ -57,7 +57,7 @@ def plot_MKM(
         df_tau["S"] = S0
         df_tau["M"] = df_tau.S / df_tau.K
 
-    RND = RndCalculator(df_tau, tau_day, day, h_densfit=h_densfit)
+    RND = RndCalculator(df_tau, tau_day, day)
     RND.fit_smile()
     RND.rookley()
 

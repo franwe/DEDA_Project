@@ -17,14 +17,14 @@ garch_data = join(cwd, "data", "02-2_hd_GARCH") + os.sep
 x = 0.5
 HdData = HdDataClass()
 RndData = RndDataClass(cutoff=x)
-# TODO: Influence of coutoff?
 
 RndData.analyse()
 
 day = "2020-03-11"
-# day = "2020-04-22"
-RndData.analyse(day)
-tau_day = 9
+day = "2020-04-19"
+day = "2020-03-22"  # 12
+print(RndData.analyse(day))
+tau_day = 12
 
 overwrite = False
 reset_S = True  # Have to! for density trafo
@@ -48,7 +48,7 @@ df_tau = RndData.filter_data(date=day, tau_day=tau_day, mode="complete")
 if reset_S:
     df_tau["S"] = S0
     df_tau["M"] = df_tau.S / df_tau.K
-RND = RndCalculator(df_tau, tau_day, day, h_densfit=0.1)
+RND = RndCalculator(df_tau, tau_day, day)
 
 RND.d2C_dK2()
 
@@ -65,3 +65,5 @@ plt.show()
 
 # integrate(RND.M, RND.q_M)
 # integrate(RND.K, RND.q_K)
+
+a = 1

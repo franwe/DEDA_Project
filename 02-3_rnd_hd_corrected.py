@@ -152,6 +152,7 @@ RndData = RndDataClass(cutoff=x)
 
 # correction to boxplot mean +/- std get median
 bw = pd.read_csv(join(cwd, "data", "02-1_rnd", "bandwidths_bu.csv"))
+bw_2 = pd.read_csv(join(cwd, "data", "02-1_rnd", "bandwidths_bu.csv"))
 
 
 def replace_by_median(value, describe):
@@ -178,17 +179,18 @@ def replace_lower(value, describe):
 
 cols = ["h_m", "h_m2"]
 for col in cols:
-    describe = bw[col].describe()
-    print(describe)
-    bw[col] = bw[col].apply(lambda val: replace_by_bound(val, describe))
+    desc_stat = bw_2[col].describe()
+    print(desc_stat)
+    bw[col] = bw_2[col].apply(lambda val: replace_by_bound(val, desc_stat))
+    del desc_stat
 
 col = "h_k"
-describe = bw[col].describe()
-bw[col] = bw[col].apply(lambda val: replace_lower(val, describe))
+desc_stat = bw_2[col].describe()
+bw[col] = bw_2[col].apply(lambda val: replace_lower(val, desc_stat))
 
-
+# -------------------- boxplot
 # ------------------------------------------------------------ CALCULATE RND HD
-(_, _, _, h, tau_min, tau_max) = load_tau_section_parameters("big")
+(_, _, _, h, tau_min, tau_max) = load_tau_section_parameters("huge")
 
 days = create_dates(start="2020-03-01", end="2020-09-30")
 for day in days:
