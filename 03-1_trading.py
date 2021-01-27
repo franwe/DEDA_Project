@@ -6,7 +6,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-logging.basicConfig(filename="trading.log", level=logging.INFO)
+logging.basicConfig(filename="trading.log", level=logging.DEBUG)
 
 from util.data import RndDataClass
 from util.general import create_dates, load_tau_section_parameters, add_one_day
@@ -29,7 +29,14 @@ save_data = join(cwd, "data", "03-1_trades") + os.sep
 save_plots = join(cwd, "plots") + os.sep
 density_data = join(cwd, "data", "02-3_rnd_hd") + os.sep
 
+
+def take_off_tails(base, other, M, percentage):
+    mask = base > base.max() * perc
+    return base[mask], other[mask], M[mask]
+
+
 # ----------------------------------------------------------- LOAD DATA HD, RND
+K_bound = 0.15
 x = 0.5
 (
     filename,
@@ -38,7 +45,7 @@ x = 0.5
     h,
     tau_min,
     tau_max,
-) = load_tau_section_parameters("small")
+) = load_tau_section_parameters("huge")
 df_results = pd.DataFrame(
     columns=[
         "date",
@@ -71,7 +78,10 @@ for day in days:
                     kernel,
                     M,
                 ) = load_rnd_hd_from_pickle(density_data, day, tau_day)
-
+                perc = 0.02
+                rnd, hd, M = take_off_tails(rnd, hd, M, perc)
+                hd, rnd, M = take_off_tails(hd, rnd, M, perc)
+                kernel = rnd / hd
                 call_mask = RND_strategy.data.option == "C"
                 RND_strategy.data["color"] = "blue"  # blue - put
                 RND_strategy.data.loc[call_mask, "color"] = "red"  # red - call
@@ -82,7 +92,6 @@ for day in days:
                 break
 
             # ---------------------------------- BUY-SELL INTERVALS FROM KERNEL
-            K_bound = 0.3
             M_bounds_sell, M_bounds_buy = get_buy_sell_bounds(
                 rnd, hd, M, K_bound
             )
@@ -109,22 +118,24 @@ for day in days:
             except KeyError:
                 logging.info(day, tau_day, " ---- Maturity not reached yet")
                 break
+            except ValueError:
+                logging.info(day, tau_day, " ---- DataFrame Empty, (cutoff)")
+                break
 
             call_mask = df_tau.option == "C"
             df_tau["color"] = "blue"  # blue - put
             df_tau.loc[call_mask, "color"] = "red"  # red - call
 
             # ------------------------- TRY IF FIND RESULT FOR TRADING STRATEGY
-            results = {}
+            results_tmp = {}
             for name, strategy in zip(
                 ["S1", "S2", "K1", "K2"], [S1, S2, K1, K2]
             ):
-                try:
-                    df_trades = strategy(df_tau, M_bounds_buy, M_bounds_sell)
-                    results.update({name: df_trades})
-                except IndexError:
-                    pass
-
+                df_trades = strategy(
+                    df_tau, M_bounds_buy, M_bounds_sell, near_bound
+                )
+                results_tmp.update({name: df_trades})
+            results = {k: v for k, v in results_tmp.items() if v is not None}
             print(trading_day, trading_tau, results.keys())
             # ----------------------------------------- KERNEL DEVIATES FROM 1?
             around_one = (kernel > 1 - K_bound) & (kernel < 1 + K_bound)
@@ -155,3 +166,17 @@ for day in days:
 
 
 df_results.to_csv(save_data + filename, index=False)
+
+df = pd.DataFrame()
+for filename in [
+    "trades_smallTau.csv",
+    "trades_bigTau.csv",
+    "trades_hugeTau.csv",
+]:
+    df_tau = pd.read_csv(save_data + filename)
+    df = df.append(df_tau, ignore_index=True)
+
+df = df.round(2)
+df = df.sort_values(by=["date", "tau_day"])
+df["id"] = range(0, df.shape[0])
+df.to_csv(save_data + "trades.csv")

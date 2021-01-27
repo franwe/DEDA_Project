@@ -134,143 +134,213 @@ def add_results_to_table(
 
 
 # ---------------------------------------------------------- TRADING STRATEGIES
-def K1(df_tau, M_bounds_buy, M_bounds_sell):
+
+
+def options_in_interval(
+    option, moneyness, action, df, left, right, near_bound
+):
+    if (moneyness == "ATM") & (option == "C"):
+        mon_left = 1 - near_bound
+        mon_right = 1 + near_bound
+        which_element = 0
+    elif (moneyness == "ATM") & (option == "P"):
+        mon_left = 1 - near_bound
+        mon_right = 1 + near_bound
+        which_element = -1
+
+    elif (moneyness == "OTM") & (option == "C"):
+        mon_left = 0
+        mon_right = 1 - near_bound
+        which_element = -1
+    elif (moneyness == "OTM") & (option == "P"):
+        mon_left = 1 + near_bound
+        mon_right = 10
+        which_element = 0
+
+    candidates = df[
+        (df.M > left)
+        & (df.M < right)  # option interval
+        & (df.M > mon_left)
+        & (df.M < mon_right)
+        & (df.option == option)
+    ]
+    candidate = candidates.iloc[which_element]
+    candidate["action"] = action
+    return candidate
+
+
+def K1(df_tau, M_bounds_buy, M_bounds_sell, near_bound):
     df = df_tau[
         ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
     ].sort_values(by="M")
+    otm_call, otm_call_action = pd.Series(), "buy"
+    otm_put, otm_put_action = pd.Series(), "buy"
+    atm_call, atm_call_action = pd.Series(), "sell"
+    atm_put, atm_put_action = pd.Series(), "sell"
 
-    all_atm_call = df[
-        (df.M > M_bounds_sell[0][0])
-        & (df.M < M_bounds_sell[0][1])
-        & (df.option == "C")
-    ]
-    sell_atm_call = all_atm_call.iloc[0]
-    sell_atm_call["action"] = "sell"
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            otm_call = options_in_interval(
+                "C", "OTM", otm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_atm_put = df[
-        (df.M > M_bounds_sell[0][0])
-        & (df.M < M_bounds_sell[0][1])
-        & (df.option == "P")
-    ]
-    sell_atm_put = all_atm_put.iloc[-1]
-    sell_atm_put["action"] = "sell"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            atm_call = options_in_interval(
+                "C", "ATM", atm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_otm_call = df[
-        (df.M > M_bounds_buy[0][0])
-        & (df.M < M_bounds_buy[0][1])
-        & (df.option == "C")
-    ]
-    buy_otm_call = all_otm_call.iloc[-1]
-    buy_otm_call["action"] = "buy"
-    all_otm_put = df[
-        (df.M > M_bounds_buy[1][0])
-        & (df.M < M_bounds_buy[1][1])
-        & (df.option == "P")
-    ]
-    buy_otm_put = all_otm_put.iloc[0]
-    buy_otm_put["action"] = "buy"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            atm_put = options_in_interval(
+                "P", "ATM", atm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    df_trades = pd.DataFrame(
-        [buy_otm_call, sell_atm_call, sell_atm_put, buy_otm_put]
-    )
-    return _trading_payoffs(df_trades)
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            otm_put = options_in_interval(
+                "P", "OTM", otm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
+
+    if any([otm_call.empty, atm_call.empty, atm_put.empty, otm_put.empty]):
+        pass
+    else:
+        df_trades = pd.DataFrame([otm_call, atm_call, atm_put, otm_put])
+        return _trading_payoffs(df_trades)
 
 
-def K2(df_tau, M_bounds_buy, M_bounds_sell):
+def K2(df_tau, M_bounds_buy, M_bounds_sell, near_bound):
     df = df_tau[
         ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
     ].sort_values(by="M")
+    otm_call, otm_call_action = pd.Series(), "sell"
+    otm_put, otm_put_action = pd.Series(), "sell"
+    atm_call, atm_call_action = pd.Series(), "buy"
+    atm_put, atm_put_action = pd.Series(), "buy"
 
-    all_atm_call = df[
-        (df.M > M_bounds_buy[0][0])
-        & (df.M < M_bounds_buy[0][1])
-        & (df.option == "C")
-    ]
-    buy_atm_call = all_atm_call.iloc[0]
-    buy_atm_call["action"] = "buy"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            otm_call = options_in_interval(
+                "C", "OTM", otm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_atm_put = df[
-        (df.M > M_bounds_buy[0][0])
-        & (df.M < M_bounds_buy[0][1])
-        & (df.option == "P")
-    ]
-    buy_atm_put = all_atm_put.iloc[-1]
-    buy_atm_put["action"] = "buy"
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            atm_call = options_in_interval(
+                "C", "ATM", atm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_otm_call = df[
-        (df.M > M_bounds_sell[0][0])
-        & (df.M < M_bounds_sell[0][1])
-        & (df.option == "C")
-    ]
-    sell_otm_call = all_otm_call.iloc[-1]
-    sell_otm_call["action"] = "sell"
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            atm_put = options_in_interval(
+                "P", "ATM", atm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_otm_put = df[
-        (df.M > M_bounds_sell[1][0])
-        & (df.M < M_bounds_sell[1][1])
-        & (df.option == "P")
-    ]
-    sell_otm_put = all_otm_put.iloc[0]
-    sell_otm_put["action"] = "sell"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            otm_put = options_in_interval(
+                "P", "OTM", otm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    df_trades = pd.DataFrame(
-        [sell_otm_call, buy_atm_call, buy_atm_put, sell_otm_put]
-    )
-    return _trading_payoffs(df_trades)
+    if any([otm_call.empty, atm_call.empty, atm_put.empty, otm_put.empty]):
+        pass
+    else:
+        df_trades = pd.DataFrame([otm_call, atm_call, atm_put, otm_put])
+        return _trading_payoffs(df_trades)
 
 
-def S1(df_tau, M_bounds_buy, M_bounds_sell):
+def S1(df_tau, M_bounds_buy, M_bounds_sell, near_bound):
     df = df_tau[
         ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
     ].sort_values(by="M")
+    otm_call, otm_call_action = pd.Series(), "buy"
+    otm_put, otm_put_action = pd.Series(), "sell"
 
-    all_otm_call = df[
-        (df.M > M_bounds_buy[0][0])
-        & (df.M < M_bounds_buy[0][1])
-        & (df.M < 0.85)  # far otm
-        & (df.option == "C")
-    ]
-    buy_otm_call = all_otm_call.iloc[-1]
-    buy_otm_call["action"] = "buy"
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            otm_call = options_in_interval(
+                "C", "OTM", otm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_otm_put = df[
-        (df.M > M_bounds_sell[0][0])
-        & (df.M < M_bounds_sell[0][1])
-        & (df.M > 1.15)  # far otm
-        & (df.option == "P")
-    ]
-    sell_otm_put = all_otm_put.iloc[0]
-    sell_otm_put["action"] = "sell"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            otm_put = options_in_interval(
+                "P", "OTM", otm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    df_trades = pd.DataFrame([buy_otm_call, sell_otm_put])
-    return _trading_payoffs(df_trades)
+    if any([otm_call.empty, otm_put.empty]):
+        pass
+    elif (len(M_bounds_buy) > 1) or (len(M_bounds_sell) > 1):
+        print(" ---- too many intervals")
+        pass
+    else:
+        df_trades = pd.DataFrame([otm_call, otm_put])
+        return _trading_payoffs(df_trades)
 
 
-def S2(df_tau, M_bounds_buy, M_bounds_sell):
+def S2(df_tau, M_bounds_buy, M_bounds_sell, near_bound):
     df = df_tau[
         ["M", "option", "P", "K", "S", "iv", "P_BTC", "color", "opt_payoff"]
     ].sort_values(by="M")
+    otm_call, otm_call_action = pd.Series(), "sell"
+    otm_put, otm_put_action = pd.Series(), "buy"
 
-    all_otm_call = df[
-        (df.M > M_bounds_sell[0][0])
-        & (df.M < M_bounds_sell[0][1])
-        & (df.M < 0.85)  # far otm
-        & (df.option == "C")
-    ]
-    sell_otm_call = all_otm_call.iloc[-1]
-    sell_otm_call["action"] = "sell"
+    for interval in M_bounds_sell:
+        left, right = interval
+        try:
+            otm_call = options_in_interval(
+                "C", "OTM", otm_call_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    all_otm_put = df[
-        (df.M > M_bounds_buy[0][0])
-        & (df.M < M_bounds_buy[0][1])
-        & (df.M > 1.15)  # far otm
-        & (df.option == "P")
-    ]
-    buy_otm_put = all_otm_put.iloc[0]
-    buy_otm_put["action"] = "buy"
+    for interval in M_bounds_buy:
+        left, right = interval
+        try:
+            otm_put = options_in_interval(
+                "P", "OTM", otm_put_action, df, left, right, near_bound
+            )
+        except IndexError:
+            pass
 
-    df_trades = pd.DataFrame([sell_otm_call, buy_otm_put])
-    return _trading_payoffs(df_trades)
+    if any([otm_call.empty, otm_put.empty]):
+        pass
+    elif (len(M_bounds_buy) > 1) or (len(M_bounds_sell) > 1):
+        print(" ---- too many intervals")
+        pass
+    else:
+        df_trades = pd.DataFrame([otm_call, otm_put])
+        return _trading_payoffs(df_trades)
 
 
 # ------------------------------------------------------- DATASTUFF - LOAD SAVE
