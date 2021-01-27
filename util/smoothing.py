@@ -85,27 +85,6 @@ def linear_estimation(X, y, x, h, kernel):
     return y_pred, 0, 0, W_hi
 
 
-def bandwidth_cv_singlerun(
-    X,
-    y,
-    x_bandwidth,
-    smoothing=local_polynomial_estimation,
-    kernel=gaussian_kernel,
-):
-    n = X.shape[0]
-    num = len(x_bandwidth)
-    cv = np.zeros(num)
-    for b, h in enumerate(x_bandwidth):
-        sqrt_err = np.zeros(X.shape[0])
-        for i, (x_test, y_test) in enumerate(zip(X, y)):
-            X_temp, Y_temp = np.delete(X, i), np.delete(y, i)
-            y_pred = smoothing(X_temp, Y_temp, x_test, h, kernel)[0]
-            sqrt_err[i] = (y_test - y_pred) ** 2
-        cv[b] = 1 / n * sum(sqrt_err)
-    h = x_bandwidth[cv.argmin()]
-    return (x_bandwidth, cv, h)
-
-
 def bandwidth_cv_slicing(
     X,
     y,
@@ -122,33 +101,97 @@ def bandwidth_cv_slicing(
     n = X.shape[0]
     idx = list(range(0, n))
     slices = list(chunks(idx, math.ceil(n / no_slices)))
-    if len(slices[0]) > 27:
-        samples = 27
+    if len(slices[0]) > 30:  # 27
+        samples = 30
     else:
         samples = len(slices[0])
 
     num = len(x_bandwidth)
-    cv = np.zeros(num)
+    mse_bw = np.zeros(num)  # for each bandwidth have mse - loss function
+    var_bw = np.zeros(num)
+    bias_bw = np.zeros(num)
 
     for b, h in enumerate(x_bandwidth):
-        sqrt_err = np.zeros(no_slices)
+        mse_slice = np.zeros(no_slices)
+        var_slice = np.zeros(no_slices)
+        bias_slice = np.zeros(no_slices)
         for i, chunk in enumerate(slices):
             X_train, X_test = np.delete(X, chunk), X[chunk]
             y_train, y_test = np.delete(y, chunk), y[chunk]
 
             runs = min(samples, len(chunk))
-            sqrt_err_tmp = np.zeros(runs)
+            y_true = np.zeros(runs)
+            y_pred = np.zeros(runs)
+            mse_test = np.zeros(runs)
+            for j, idx_test in enumerate(
+                random.sample(list(range(0, len(chunk))), runs)
+            ):
+                y_hat = smoothing(
+                    X_train, y_train, X_test[idx_test], h, kernel
+                )[0]
+                y_true[j] = y_test[idx_test]
+                y_pred[j] = y_hat
+                mse_test[j] = (y_test[idx_test] - y_hat) ** 2
+            # mse_slice[i] = 1 / runs * sum(mse_test)
+            mse_slice[i] = 1 / runs * sum((y_true - y_pred) ** 2)
+            var_slice[i] = (
+                1 / runs * sum(y_pred ** 2) - (1 / runs * sum(y_pred)) ** 2
+            )
+            # bias_slice[i] = (1 / runs * sum(y_true - y_pred)) ** 2
+            bias_slice[i] = (1 / runs * sum(y_pred - y_true)) ** 2
+
+        mse_bw[b] = 1 / no_slices * sum(mse_slice)
+        var_bw[b] = 1 / no_slices * sum(var_slice)
+        bias_bw[b] = 1 / no_slices * sum(bias_slice)
+
+    h = x_bandwidth[mse_bw.argmin()]
+    return (x_bandwidth, mse_bw, h), (var_bw, bias_bw)
+
+
+def bandwidth_cv_random(
+    X,
+    y,
+    x_bandwidth,
+    smoothing=local_polynomial_estimation,
+    kernel=gaussian_kernel,
+    no_slices=30,
+):
+    np.random.seed(1)
+    df = pd.DataFrame(data=y, index=X)
+    df = df.sort_index()
+    X = np.array(df.index)
+    y = np.array(df[0])
+    n = X.shape[0]
+    idx = list(range(0, n))
+    random.shuffle(idx)
+    slices = list(chunks(idx, math.ceil(n / no_slices)))
+    if len(slices[0]) > 50:
+        samples = 50
+    else:
+        samples = len(slices[0])
+
+    num = len(x_bandwidth)
+    mase = np.zeros(num)
+
+    for b, h in enumerate(x_bandwidth):
+        mse = np.zeros(no_slices)
+        for i, chunk in enumerate(slices):
+            X_train, X_test = np.delete(X, chunk), X[chunk]
+            y_train, y_test = np.delete(y, chunk), y[chunk]
+
+            runs = min(samples, len(chunk))
+            mse_tmp = np.zeros(runs)
             for j, idx_test in enumerate(
                 random.sample(list(range(0, len(chunk))), runs)
             ):
                 y_pred = smoothing(
                     X_train, y_train, X_test[idx_test], h, kernel
                 )[0]
-                sqrt_err_tmp[j] = (y_test[idx_test] - y_pred) ** 2
-            sqrt_err[i] = sum(sqrt_err_tmp)
-        cv[b] = 1 / n * sum(sqrt_err)
-    h = x_bandwidth[cv.argmin()]
-    return (x_bandwidth, cv, h)
+                mse_tmp[j] = (y_test[idx_test] - y_pred) ** 2
+            mse[i] = 1 / runs * sum(mse_tmp)
+        mase[b] = 1 / no_slices * sum(mse)
+    h = x_bandwidth[mase.argmin()]
+    return (x_bandwidth, mase, h)
 
 
 def bandwidth_cv(
@@ -157,23 +200,35 @@ def bandwidth_cv(
     x_bandwidth,
     smoothing=local_polynomial_estimation,
     kernel=gaussian_kernel,
-    show_plot=False,
+    show_plot=True,
 ):
-    x_bandwidth_1, cv_1, h_1 = bandwidth_cv_slicing(X, y, x_bandwidth)
+    (x_bandwidth_1, mse_1, h_1), (var_1, bias_1) = bandwidth_cv_slicing(
+        X, y, x_bandwidth
+    )
 
     stepsize = x_bandwidth[1] - x_bandwidth[0]
     x_bandwidth_2 = np.linspace(
         h_1 - (stepsize * 1.1), h_1 + (stepsize * 1.1), 10
     )
 
-    x_bandwidth_2, cv_2, h_2 = bandwidth_cv_slicing(X, y, x_bandwidth_2)
+    (x_bandwidth_2, mse_2, h_2), (var_2, bias_2) = bandwidth_cv_slicing(
+        X, y, x_bandwidth_2
+    )
 
     print(h_1, h_2)
     if show_plot:
-        plt.plot(x_bandwidth_1, cv_1)
-        plt.plot(x_bandwidth_2, cv_2)
+        fig = plt.figure(figsize=(4, 4))
+        ax = fig.add_subplot(111)
+        ax.plot(x_bandwidth_1, mse_1, ":", c="k")
+        ax.plot(x_bandwidth_2, mse_2, "-", c="k")
+        ax.set_xlabel("bandwidth")
+        ax.set_ylabel("MSE")
+        # ax.set_xlim(0.048, 0.092)
+        # ax.set_ylim(0.000645, 0.000914)
+        ax.set_yticks([])
+        plt.tight_layout()
         plt.show()
-    return (x_bandwidth_2, cv_2, h_2), (x_bandwidth_1, cv_1, h_1)
+    return (x_bandwidth_2, mse_2, h_2), (x_bandwidth_1, mse_1, h_1)
 
 
 def create_fit(
