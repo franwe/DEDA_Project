@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 
 from util.data_processing import data_processing
-from util.connect_db import connect_db, get_as_df, write_in_db, bulk_write
+from util.connect_db import connect_db, get_as_df, bulk_write
 
 cwd = os.getcwd() + os.sep
 data_path = cwd + "data" + os.sep
